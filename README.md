@@ -1,9 +1,7 @@
 # qBittorrent plugins
 
-.............
-
 ## Kinozal.tv
-
+Russian torrent tracker mostly directed on movies, but have other categories
 
 ## Installation
 * Edit `kinozal.py` by replacing `KINOZAL_USERNAME` and `KINOZAL_PASSWORD` with your Kinozal username and password.
