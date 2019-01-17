@@ -1,7 +1,5 @@
 # qBittorrent plugins
 
-.............
-
 ## Kinozal.tv
 Russian torrent tracker mostly directed on movies, but have other categories
 
