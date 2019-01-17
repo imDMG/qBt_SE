@@ -9,8 +9,8 @@ Russian torrent tracker mostly directed on movies, but have other categories
   * find `"proxy": false` and switch in `true` (`"proxy": true`)
   * add proxy links working for you in `proxies` (`{'http': 'proxy.example.org:8080'}`) 
   * *make sure that your proxy work with right protocol*
-* Move `kinozal.py`, `kinozal.json` and `kinozal.png` to qBittorrent search engines directory:
+* Move `kinozal.json` and `kinozal.png` to qBittorrent search engines directory:
   * Windows: `%localappdata%\qBittorrent\nova3\engines\`
   * Linux: `~/.local/share/data/qBittorrent/nova3/engines/`
   * OS X: `~/Library/Application Support/qBittorrent/nova3/engines/`
-* Kinozal search engine should now be available in qBittorrent.
+* Then follow [official tutorial](https://github.com/qbittorrent/search-plugins/wiki/How-to-write-a-search-plugin).
