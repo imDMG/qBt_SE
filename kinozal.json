@@ -1,0 +1,11 @@
+{
+  "username": "USERNAME",
+  "password": "PASSWORD",
+  "proxy": false,
+  "proxies": {
+    "http": "proxy.example.org:8080",
+    "https": "proxy.example.org:2020"
+  },
+  "log": "os.path.abspath(os.path.join(os.path.dirname(__file__), '../../logs', 'kinozal.log'))",
+  "ua": "Mozilla/5.0 (X11; Linux i686; rv:38.0) Gecko/20100101 Firefox/38.0"
+}
