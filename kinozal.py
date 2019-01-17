@@ -6,7 +6,7 @@
 import tempfile
 import os
 import logging
-import time
+# import time
 
 from urllib.request import build_opener, HTTPCookieProcessor, ProxyHandler
 from urllib.parse import urlencode, quote, unquote
@@ -41,15 +41,15 @@ class kinozal(object):
 
     # Set proxies (default false)
     # make sure that proxies keys is'nt empty
-    proxy = True
+    proxy = False
     proxies = {
         'http': '',
         'https': '',
     }
 
     # credentials
-    username = "USERNAME"
-    password = "PASSWORD"
+    username = "KINOZAL_USERNAME"
+    password = "KINOZAL_PASSWORD"
     ua = 'Mozilla/5.0 (X11; Linux i686; rv:38.0) Gecko/20100101 Firefox/38.0'
 
     def __init__(self):
