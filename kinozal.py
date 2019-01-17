@@ -6,6 +6,7 @@
 import tempfile
 import os
 import logging
+import json
 # import time
 
 from urllib.request import build_opener, HTTPCookieProcessor, ProxyHandler
@@ -19,9 +20,7 @@ from novaprinter import prettyPrinter
 logging.basicConfig(level=logging.DEBUG,
                     format='%(asctime)s %(name)-12s %(levelname)-8s %(message)s',
                     datefmt='%m-%d %H:%M',
-                    filename=os.path.abspath(
-                        os.path.join(os.path.dirname(__file__), '../..', 'logs')) + "/kinozal_se.log",
-                    # filename="kinozal_se.log",
+                    filename=os.path.abspath(os.path.join(os.path.dirname(__file__), '../../logs', 'kinozal.log')),
                     filemode='w')
 
 # benchmark
@@ -39,18 +38,16 @@ class kinozal(object):
                             'anime': '20',
                             'software': '32'}
 
-    # Set proxies (default false)
-    # make sure that proxies keys is'nt empty
-    proxy = False
-    proxies = {
-        'http': '',
-        'https': '',
-    }
-
-    # credentials
-    username = "KINOZAL_USERNAME"
-    password = "KINOZAL_PASSWORD"
-    ua = 'Mozilla/5.0 (X11; Linux i686; rv:38.0) Gecko/20100101 Firefox/38.0'
+    # getting config from kinozal.json
+    config = None
+    try:
+        # try to load user data from file
+        with open(os.path.abspath(os.path.join(os.path.dirname(__file__), 'kinozal.json'))) as f:
+            config = json.load(f)
+    except OSError as e:
+        # file not found
+        logging.error(e)
+        raise e
 
     def __init__(self):
         # establish connection
@@ -60,14 +57,14 @@ class kinozal(object):
         self.session = build_opener(HTTPCookieProcessor(cj))
 
         # add proxy handler if needed
-        if self.proxy and any(self.proxies.keys()):
-            self.session.add_handler(ProxyHandler(self.proxies))
+        if self.config['proxy'] and any(self.config['proxies'].keys()):
+            self.session.add_handler(ProxyHandler(self.config['proxies']))
 
         # change user-agent
         self.session.addheaders.pop()
-        self.session.addheaders.append(('User-Agent', self.ua))
+        self.session.addheaders.append(('User-Agent', self.config['ua']))
 
-        form_data = {"username": self.username, "password": self.password}
+        form_data = {"username": self.config['username'], "password": self.config['password']}
         data_encoded = urlencode(form_data).encode('cp1251')
 
         try:
@@ -82,7 +79,7 @@ class kinozal(object):
             raise e
 
         if 'uid' not in [cookie.name for cookie in cj]:
-            logging.debug(cj)
+            logging.warning("we not authorized, please check your credentials")
 
     class WorstParser(HTMLParser):
         def __init__(self, url=''):
@@ -232,13 +229,15 @@ class kinozal(object):
                 parser.feed(response.read().decode('cp1251'))
                 parser.close()
 
+        logging.info("Found torrents: %s" % parser.found_torrents)
+
 
 # logging.debug("--- %s seconds ---" % (time.time() - start_time))
 if __name__ == "__main__":
+    """"""
     kinozal_se = kinozal()
     # print(os.path.abspath(os.path.join(os.path.dirname(__file__), '../..', 'logs')))
     # print(kinozal_se.WorstParser.units_convert("500 КБ"))
-    # kinozal_se.search('terror lostfilm', 'tv')
-    # kinozal_se._handle_connection(True)
+    kinozal_se.search('supernatural')
     # kinozal_se.download_torrent('http://dl.kinozal.tv/download.php?id=1609776')
     # print("--- %s seconds ---" % (time.time() - start_time))
