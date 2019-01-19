@@ -239,7 +239,7 @@ class nnmclub(object):
                 parser.feed(response.read().decode('cp1251'))
                 parser.close()
 
-        logging.info("Found torrents: %s" % parser.found_torrents)
+        logging.info("Found torrents: {}".format(parser.found_torrents))
 
     def _catch_error_request(self, url='', data=None):
         url = url if url else self.url
