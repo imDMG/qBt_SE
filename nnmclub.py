@@ -234,8 +234,7 @@ class nnmclub(object):
             for x in range(1, parser.pages):
                 response = self._catch_error_request('{}&start={}'.format(query,      # &search_id=
                                                                                       # parser.search_id,
-                                                                                      parser.found_torrents,
-                                                                                      self.supported_categories[cat]))
+                                                                                      parser.found_torrents))
                 parser.feed(response.read().decode('cp1251'))
                 parser.close()
 
