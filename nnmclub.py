@@ -1,5 +1,5 @@
-# VERSION: 1.0
-# AUTHORS: imDMG
+# VERSION: 1.1
+# AUTHORS: imDMG [imdmgg@gmail.com]
 
 # NoNaMe-Club search engine plugin for qBittorrent
 
@@ -17,7 +17,7 @@ from html.parser import HTMLParser
 from novaprinter import prettyPrinter
 
 # setup logging into qBittorrent/logs
-logging.basicConfig(level=logging.DEBUG,
+logging.basicConfig(level=logging.INFO,
                     format='%(asctime)s %(name)-12s %(levelname)-8s %(message)s',
                     datefmt='%m-%d %H:%M',
                     filename=os.path.abspath(os.path.join(os.path.dirname(__file__), '../../logs', 'nnmclub.log')),
@@ -69,6 +69,10 @@ class nnmclub(object):
         self.session.addheaders.append(('User-Agent', self.config['ua']))
 
         response = self._catch_error_request(self.url + 'login.php')
+        # checking that tracker is'nt blocked
+        if self.url not in response.geturl():
+            logging.warning("{} is blocked. Try proxy or another proxy".format(self.url))
+            exit()
         parser = self.WorstParser(self.url, True)
         parser.feed(response.read().decode('cp1251'))
         parser.close()
@@ -238,6 +242,7 @@ class nnmclub(object):
                 parser.feed(response.read().decode('cp1251'))
                 parser.close()
 
+        logging.debug("--- {} seconds ---".format(time.time() - start_time))
         logging.info("Found torrents: {}".format(parser.found_torrents))
 
     def _catch_error_request(self, url='', data=None):
@@ -261,4 +266,3 @@ class nnmclub(object):
 if __name__ == "__main__":
     nnmclub_se = nnmclub()
     nnmclub_se.search('supernatural')
-    print("--- %s seconds ---" % (time.time() - start_time))
