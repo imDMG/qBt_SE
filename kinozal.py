@@ -1,5 +1,5 @@
-# VERSION: 1.1
-# AUTHORS: imDMG (imdmgg@gmail.com)
+# VERSION: 1.2
+# AUTHORS: imDMG [imdmgg@gmail.com]
 
 # Kinozal.tv search engine plugin for qBittorrent
 
@@ -56,6 +56,9 @@ class kinozal(object):
         cj = CookieJar()
         self.session = build_opener(HTTPCookieProcessor(cj))
 
+        # avoid endless waiting
+        self.blocked = False
+
         # add proxy handler if needed
         if self.config['proxy'] and any(self.config['proxies'].keys()):
             self.session.add_handler(ProxyHandler(self.config['proxies']))
@@ -68,16 +71,12 @@ class kinozal(object):
         # so we first encode keys to cp1251 then do default decode whole string
         data_encoded = urlencode({k: v.encode('cp1251') for k, v in form_data.items()}).encode()
 
-        response = self._catch_error_request(self.url + '/takelogin.php', data_encoded)
-        # checking that tracker is'nt blocked
-        if self.url not in response.geturl():
-            logging.warning("{} is blocked. Try proxy or another proxy".format(self.url))
-            exit()
-
-        if 'uid' not in [cookie.name for cookie in cj]:
-            logging.warning("we not authorized, please check your credentials")
-        else:
-            logging.info('We successfully authorized')
+        self._catch_error_request(self.url + '/takelogin.php', data_encoded)
+        if not self.blocked:
+            if 'uid' not in [cookie.name for cookie in cj]:
+                logging.warning("we not authorized, please check your credentials")
+            else:
+                logging.info('We successfully authorized')
 
     class WorstParser(HTMLParser):
         def __init__(self, url=''):
@@ -188,6 +187,8 @@ class kinozal(object):
             pass
 
     def download_torrent(self, url):
+        if self.blocked:
+            return
         # Create a torrent file
         file, path = tempfile.mkstemp('.torrent')
         file = os.fdopen(file, "wb")
@@ -204,6 +205,8 @@ class kinozal(object):
         print(path + " " + url)
 
     def search(self, what, cat='all'):
+        if self.blocked:
+            return
         query = '{}/browse.php?s={}&c={}'.format(self.url, what.replace(" ", "+"), self.supported_categories[cat])
         response = self._catch_error_request(query)
         parser = self.WorstParser(self.url)
@@ -234,6 +237,12 @@ class kinozal(object):
         except (URLError, HTTPError) as e:
             logging.error(e)
             raise e
+
+        # checking that tracker is'nt blocked
+        self.blocked = False
+        if self.url not in response.geturl():
+            logging.warning("{} is blocked. Try proxy or another proxy".format(self.url))
+            self.blocked = True
 
         return response
 

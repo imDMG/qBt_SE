@@ -1,4 +1,4 @@
-# VERSION: 1.1
+# VERSION: 1.2
 # AUTHORS: imDMG [imdmgg@gmail.com]
 
 # NoNaMe-Club search engine plugin for qBittorrent
@@ -60,6 +60,9 @@ class nnmclub(object):
         cj.set_cookie(c)
         self.session = build_opener(HTTPCookieProcessor(cj))
 
+        # avoid endless waiting
+        self.blocked = False
+
         # add proxy handler if needed
         if self.config['proxy'] and any(self.config['proxies'].keys()):
             self.session.add_handler(ProxyHandler(self.config['proxies']))
@@ -69,28 +72,25 @@ class nnmclub(object):
         self.session.addheaders.append(('User-Agent', self.config['ua']))
 
         response = self._catch_error_request(self.url + 'login.php')
-        # checking that tracker is'nt blocked
-        if self.url not in response.geturl():
-            logging.warning("{} is blocked. Try proxy or another proxy".format(self.url))
-            exit()
-        parser = self.WorstParser(self.url, True)
-        parser.feed(response.read().decode('cp1251'))
-        parser.close()
+        if not self.blocked:
+            parser = self.WorstParser(self.url, True)
+            parser.feed(response.read().decode('cp1251'))
+            parser.close()
 
-        form_data = {"username": self.config['username'],
-                     "password": self.config['password'],
-                     "autologin": "on",
-                     "code": parser.login_code,
-                     "login": "Вход"}
-        # so we first encode keys to cp1251 then do default decode whole string
-        data_encoded = urlencode({k: v.encode('cp1251') for k, v in form_data.items()}).encode()
+            form_data = {"username": self.config['username'],
+                         "password": self.config['password'],
+                         "autologin": "on",
+                         "code": parser.login_code,
+                         "login": "Вход"}
+            # so we first encode keys to cp1251 then do default decode whole string
+            data_encoded = urlencode({k: v.encode('cp1251') for k, v in form_data.items()}).encode()
 
-        self._catch_error_request(self.url + 'login.php', data_encoded)
+            self._catch_error_request(self.url + 'login.php', data_encoded)
 
-        if 'phpbb2mysql_4_sid' not in [cookie.name for cookie in cj]:
-            logging.warning("we not authorized, please check your credentials")
-        else:
-            logging.info('We successfully authorized')
+            if 'phpbb2mysql_4_sid' not in [cookie.name for cookie in cj]:
+                logging.warning("we not authorized, please check your credentials")
+            else:
+                logging.info('We successfully authorized')
 
     class WorstParser(HTMLParser):
         def __init__(self, url='', login=False):
@@ -210,6 +210,8 @@ class nnmclub(object):
             pass
 
     def download_torrent(self, url):
+        if self.blocked:
+            return
         # Create a torrent file
         file, path = tempfile.mkstemp('.torrent')
         file = os.fdopen(file, "wb")
@@ -226,6 +228,8 @@ class nnmclub(object):
         print(path + " " + url)
 
     def search(self, what, cat='all'):
+        if self.blocked:
+            return
         c = self.supported_categories[cat]
         query = '{}tracker.php?nm={}&{}'.format(self.url, what.replace(" ", "+"), "f=-1" if c == '-1' else "c=" + c)
         response = self._catch_error_request(query)
@@ -259,6 +263,12 @@ class nnmclub(object):
         except (URLError, HTTPError) as e:
             logging.error(e)
             raise e
+
+        # checking that tracker is'nt blocked
+        self.blocked = False
+        if self.url not in response.geturl():
+            logging.warning("{} is blocked. Try proxy or another proxy".format(self.url))
+            self.blocked = True
 
         return response
 
