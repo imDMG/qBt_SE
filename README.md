@@ -22,7 +22,7 @@ According of the name of search plugin:
 ## Troubleshooting
 :warning: If the plugin is't installed with a message about the incompatibility of the plugin:
  * check that you added all included files
- * if torrent tracker is't avalaible for you in web - configure the proxy
+ * if torrent tracker is't avalaible for you in web - configure the proxy in *.json file
 
 All other errors and warnings you can see in log file `*.log`:
   * Windows: `%localappdata%\qBittorrent\logs\`
