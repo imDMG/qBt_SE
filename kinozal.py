@@ -1,4 +1,4 @@
-#VERSION: 1.1
+# VERSION: 1.1
 # AUTHORS: imDMG (imdmgg@gmail.com)
 
 # Kinozal.tv search engine plugin for qBittorrent
