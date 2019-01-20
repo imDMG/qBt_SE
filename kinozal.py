@@ -1,30 +1,30 @@
-# VERSION: 1.0
-# AUTHORS: imDMG
+# VERSION: 1.1
+# AUTHORS: imDMG (imdmgg@gmail.com)
 
-# LICENSING INFORMATION
+# Kinozal.tv search engine plugin for qBittorrent
 
 import tempfile
 import os
 import logging
 import json
-# import time
+import time
 
 from urllib.request import build_opener, HTTPCookieProcessor, ProxyHandler
-from urllib.parse import urlencode, quote, unquote
+from urllib.parse import urlencode
 from urllib.error import URLError, HTTPError
 from http.cookiejar import CookieJar
 from html.parser import HTMLParser
 from novaprinter import prettyPrinter
 
 # setup logging into qBittorrent/logs
-logging.basicConfig(level=logging.DEBUG,
+logging.basicConfig(level=logging.INFO,
                     format='%(asctime)s %(name)-12s %(levelname)-8s %(message)s',
                     datefmt='%m-%d %H:%M',
                     filename=os.path.abspath(os.path.join(os.path.dirname(__file__), '../../logs', 'kinozal.log')),
                     filemode='w')
 
 # benchmark
-# start_time = time.time()
+start_time = time.time()
 
 
 class kinozal(object):
@@ -65,21 +65,19 @@ class kinozal(object):
         self.session.addheaders.append(('User-Agent', self.config['ua']))
 
         form_data = {"username": self.config['username'], "password": self.config['password']}
-        data_encoded = urlencode(form_data).encode('cp1251')
+        # so we first encode keys to cp1251 then do default decode whole string
+        data_encoded = urlencode({k: v.encode('cp1251') for k, v in form_data.items()}).encode()
 
-        try:
-            response = self.session.open(self.url + '/takelogin.php', data_encoded)
-            # Only continue if response status is OK.
-            if response.getcode() != 200:
-                raise HTTPError(response.geturl(), response.getcode(),
-                                "HTTP request to {} failed with status: {}".format(self.url, response.getcode()),
-                                response.info(), None)
-        except (URLError, HTTPError) as e:
-            logging.error(e)
-            raise e
+        response = self._catch_error_request(self.url + '/takelogin.php', data_encoded)
+        # checking that tracker is'nt blocked
+        if self.url not in response.geturl():
+            logging.warning("{} is blocked. Try proxy or another proxy".format(self.url))
+            exit()
 
         if 'uid' not in [cookie.name for cookie in cj]:
             logging.warning("we not authorized, please check your credentials")
+        else:
+            logging.info('We successfully authorized')
 
     class WorstParser(HTMLParser):
         def __init__(self, url=''):
@@ -155,7 +153,7 @@ class kinozal(object):
             # detecting that torrent row is closed and print all collected data
             if self.torrent_row and tag == 'tr':
                 self.torrent["engine_url"] = self.url
-                logging.debug('tr: ' + str(self.torrent))
+                logging.debug('self.torrent: ' + str(self.torrent))
                 prettyPrinter(self.torrent)
                 self.torrent = {key: '' for key in self.torrent}
                 self.index_td = 0
@@ -181,11 +179,10 @@ class kinozal(object):
         @staticmethod
         def units_convert(unit):
             # replace size units
-            table = {'ТБ': 'TB', 'ГБ': 'GB', 'МБ': 'MB', 'КБ': 'KB'}
-            x = unit.split(" ")
-            x[1] = table[x[1]]
+            find = unit.split()[1]
+            replace = {'ТБ': 'TB', 'ГБ': 'GB', 'МБ': 'MB', 'КБ': 'KB'}[find]
 
-            return " ".join(x)
+            return unit.replace(find, replace)
 
         def error(self, message):
             pass
@@ -196,16 +193,7 @@ class kinozal(object):
         file = os.fdopen(file, "wb")
 
         # Download url
-        try:
-            response = self.session.open(url)
-            # Only continue if response status is OK.
-            if response.getcode() != 200:
-                raise HTTPError(response.geturl(), response.getcode(),
-                                "HTTP request to {} failed with status: {}".format(url, response.getcode()),
-                                response.info(), None)
-        except (URLError, HTTPError) as e:
-            logging.error(e)
-            raise e
+        response = self._catch_error_request(url)
 
         # Write it to a file
         file.write(response.read())
@@ -216,8 +204,8 @@ class kinozal(object):
         print(path + " " + url)
 
     def search(self, what, cat='all'):
-        query = '%s/browse.php?s=%s&c=%s' % (self.url, unquote(quote(what)), self.supported_categories[cat])
-        response = self.session.open(query)
+        query = '{}/browse.php?s={}&c={}'.format(self.url, what.replace(" ", "+"), self.supported_categories[cat])
+        response = self._catch_error_request(query)
         parser = self.WorstParser(self.url)
         parser.feed(response.read().decode('cp1251'))
         parser.close()
@@ -225,19 +213,31 @@ class kinozal(object):
         # if first request return that we have pages, we do cycle
         if parser.pages:
             for x in range(1, parser.pages):
-                response = self.session.open('%s&page=%s' % (query, x))
+                response = self._catch_error_request('{}&page={}'.format(query, x))
                 parser.feed(response.read().decode('cp1251'))
                 parser.close()
 
-        logging.info("Found torrents: %s" % parser.found_torrents)
+        logging.debug("--- {} seconds ---".format(time.time() - start_time))
+        logging.info("Found torrents: {}".format(parser.found_torrents))
+
+    def _catch_error_request(self, url='', data=None):
+        url = url if url else self.url
+
+        try:
+            response = self.session.open(url, data)
+            # Only continue if response status is OK.
+            if response.getcode() != 200:
+                logging.error('Unable connect')
+                raise HTTPError(response.geturl(), response.getcode(),
+                                "HTTP request to {} failed with status: {}".format(url, response.getcode()),
+                                response.info(), None)
+        except (URLError, HTTPError) as e:
+            logging.error(e)
+            raise e
+
+        return response
 
 
-# logging.debug("--- %s seconds ---" % (time.time() - start_time))
 if __name__ == "__main__":
-    """"""
     kinozal_se = kinozal()
-    # print(os.path.abspath(os.path.join(os.path.dirname(__file__), '../..', 'logs')))
-    # print(kinozal_se.WorstParser.units_convert("500 КБ"))
     kinozal_se.search('supernatural')
-    # kinozal_se.download_torrent('http://dl.kinozal.tv/download.php?id=1609776')
-    # print("--- %s seconds ---" % (time.time() - start_time))
