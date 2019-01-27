@@ -1,4 +1,4 @@
-# VERSION: 1.2
+# VERSION: 1.3
 # AUTHORS: imDMG [imdmgg@gmail.com]
 
 # Kinozal.tv search engine plugin for qBittorrent
@@ -7,6 +7,7 @@ import tempfile
 import os
 import logging
 import json
+# import re
 import time
 
 from urllib.request import build_opener, HTTPCookieProcessor, ProxyHandler
@@ -43,7 +44,7 @@ class kinozal(object):
     try:
         # try to load user data from file
         with open(os.path.abspath(os.path.join(os.path.dirname(__file__), 'kinozal.json'))) as f:
-            config = json.load(f)
+            config: dict = json.load(f)
     except OSError as e:
         # file not found
         logging.error(e)
@@ -186,23 +187,32 @@ class kinozal(object):
         def error(self, message):
             pass
 
-    def download_torrent(self, url):
+    def download_torrent(self, url: str):
         if self.blocked:
             return
-        # Create a torrent file
-        file, path = tempfile.mkstemp('.torrent')
-        file = os.fdopen(file, "wb")
+        # choose download method
+        if self.config.get("magnet"):
+            res = self._catch_error_request(self.url + "/get_srv_details.php?action=2&id=" + url.split("=")[1])
+            # magnet = re.search(":\s([A-Z0-9]{40})\<", res.read().decode())[1]
+            magnet = 'magnet:?xt=urn:btih:' + res.read().decode()[18:58]
+            # return magnet link
+            logging.debug(magnet + " " + url)
+            print(magnet + " " + url)
+        else:
+            # Create a torrent file
+            file, path = tempfile.mkstemp('.torrent')
+            file = os.fdopen(file, "wb")
 
-        # Download url
-        response = self._catch_error_request(url)
+            # Download url
+            response = self._catch_error_request(url)
 
-        # Write it to a file
-        file.write(response.read())
-        file.close()
+            # Write it to a file
+            file.write(response.read())
+            file.close()
 
-        # return file path
-        logging.debug(path + " " + url)
-        print(path + " " + url)
+            # return file path
+            logging.debug(path + " " + url)
+            print(path + " " + url)
 
     def search(self, what, cat='all'):
         if self.blocked:
@@ -249,4 +259,5 @@ class kinozal(object):
 
 if __name__ == "__main__":
     kinozal_se = kinozal()
-    kinozal_se.search('supernatural')
+    # kinozal_se.download_torrent("http://kinozal.tv/details.php?id=1263407")
+    # kinozal_se.search('supernatural')
