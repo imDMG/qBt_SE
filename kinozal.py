@@ -230,6 +230,20 @@ class kinozal(object):
                 parser.feed(response.read().decode('cp1251'))
                 parser.close()
 
+        # parser = self.WorstParser(self.url)
+        # previous = 1
+        # # loop while current not float or privues not equal current
+        # while not parser.found_torrents % 50:
+        #     query = '{}/browse.php?s={}&c={}&page={}'.format(self.url, what.replace(" ", "+"),
+        #                                                      self.supported_categories[cat],
+        #                                                      round((parser.found_torrents + 50) // 50) - 1)
+        #     response = self._catch_error_request(query)
+        #     parser.feed(response.read().decode('cp1251'))
+        #     if previous == parser.found_torrents:
+        #         break
+        #     previous = parser.found_torrents
+        # parser.close()
+
         logging.debug("--- {} seconds ---".format(time.time() - start_time))
         logging.info("Found torrents: {}".format(parser.found_torrents))
 
@@ -260,4 +274,4 @@ class kinozal(object):
 if __name__ == "__main__":
     kinozal_se = kinozal()
     # kinozal_se.download_torrent("http://kinozal.tv/details.php?id=1263407")
-    # kinozal_se.search('supernatural')
+    kinozal_se.search('supernatural')
