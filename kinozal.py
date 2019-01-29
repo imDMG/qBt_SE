@@ -87,7 +87,7 @@ class kinozal(object):
 
         for tor in torrents:
             torrent = {"engine_url": self.url,
-                       "desc_link": tor[0],
+                       "desc_link": self.url + tor[0],
                        "name": tor[1],
                        "link": 'http://dl.kinozal.tv/download.php?id=' + tor[0].split('=')[1],
                        "size": self.units_convert(tor[2]),
