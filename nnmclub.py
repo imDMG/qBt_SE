@@ -130,7 +130,7 @@ class nnmclub(object):
         response = self._catch_error_request(query)
         page = response.read().decode('cp1251')
         self.draw(page)
-        total = int(re.search(r'\(max:\s(\d{1,3})\)', page)[1]) if first else -1
+        total = int(re.search(r'(\d{1,3})\s\(max:', page)[1]) if first else -1
 
         return total
 
