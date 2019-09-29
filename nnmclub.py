@@ -31,7 +31,7 @@ start_time = time.time()
 
 class nnmclub(object):
     name = 'NoNaMe-Club'
-    url = 'https://nnm-club.me/forum/'
+    url = 'https://nnmclub.to/forum/'
     supported_categories = {'all': '-1',
                             'movies': '14',
                             'tv': '27',
@@ -40,7 +40,7 @@ class nnmclub(object):
                             'anime': '24',
                             'software': '21'}
 
-    # getting config from kinozal.json
+    # getting config from nnmclub.json
     config = None
     try:
         # try to load user data from file
@@ -57,7 +57,7 @@ class nnmclub(object):
         # make cookie
         cj = CookieJar()
         # if we wanna use https we mast add ssl=enable_ssl to cookie
-        c = Cookie(0, 'ssl', "enable_ssl", None, False, '.nnm-club.me',
+        c = Cookie(0, 'ssl', "enable_ssl", None, False, '.nnmclub.to',
                    True, False, '/', True, False, None, 'ParserCookie', None, None, None)
         cj.set_cookie(c)
         self.session = build_opener(HTTPCookieProcessor(cj))
