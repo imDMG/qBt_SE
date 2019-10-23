@@ -12,7 +12,7 @@ One of biggest russian torrent tracker.
 ## Installation
 **For fresh installation.**
 According of the name of search plugin:
-* Copy the plugin to the directory according to your operating system:
+* Copy the plugin (`*.py`) to the directory according to your operating system:
   * Windows: `%localappdata%\qBittorrent\nova3\engines\`
   * Linux: `~/.local/share/data/qBittorrent/nova3/engines/`
   * OS X: `~/Library/Application Support/qBittorrent/nova3/engines/`
