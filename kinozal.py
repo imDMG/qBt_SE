@@ -1,11 +1,10 @@
-# VERSION: 2.0
+# VERSION: 2.1
 # AUTHORS: imDMG [imdmgg@gmail.com]
 
 # Kinozal.tv search engine plugin for qBittorrent
 
 import json
 import logging
-import math
 import os
 import re
 import tempfile
@@ -15,17 +14,8 @@ import time
 from urllib.request import build_opener, HTTPCookieProcessor, ProxyHandler
 from urllib.parse import urlencode
 from urllib.error import URLError, HTTPError
-from http.cookiejar import CookieJar
+from http.cookiejar import MozillaCookieJar
 from novaprinter import prettyPrinter
-
-# setup logging into qBittorrent/logs
-logging.basicConfig(level=logging.INFO,
-                    format='%(asctime)s %(name)-12s %(levelname)-8s %(message)s',
-                    datefmt='%m-%d %H:%M',
-                    filename=os.path.abspath(os.path.join(os.path.dirname(__file__), '../../logs', 'kinozal.log')),
-                    filemode='w')
-
-start_time = time.time()
 
 
 class kinozal(object):
@@ -39,28 +29,46 @@ class kinozal(object):
                             'anime': '20',
                             'software': '32'}
 
-    # getting config from kinozal.json
-    config = None
-    try:
-        # try to load user data from file
-        with open(os.path.abspath(os.path.join(os.path.dirname(__file__), 'kinozal.json'))) as f:
-            config: dict = json.load(f)
-    except OSError as e:
-        # file not found
-        logging.error(e)
-        raise e
+    # default config for kinozal.json
+    config = {
+        "version": 2,
+        "torrentDate": True,
+        "username": "USERNAME",
+        "password": "PASSWORD",
+        "proxy": False,
+        "proxies": {
+            "http": "",
+            "https": ""
+        },
+        "magnet": True,
+        "ua": "Mozilla/5.0 (X11; Linux i686; rv:38.0) Gecko/20100101 Firefox/38.0"
+    }
 
     def __init__(self):
-        logging.info('Initialisation')
-        self.result = []
-        # establish connection
-        #
-        # make cookie
-        cj = CookieJar()
-        self.session = build_opener(HTTPCookieProcessor(cj))
+        # setup logging into qBittorrent/logs
+        logging.basicConfig(handlers=[logging.FileHandler(self.path_to('../../logs', 'kinozal.log'), 'w', 'utf-8')],
+                            level=logging.DEBUG,
+                            format='%(asctime)s %(name)-12s %(levelname)-8s %(message)s',
+                            datefmt='%m-%d %H:%M')
 
-        # avoid endless waiting
-        self.blocked = False
+        try:
+            # try to load user data from file
+            with open(self.path_to('kinozal.json'), 'r+') as f:
+                config = json.load(f)
+                if "version" not in config.keys():
+                    config.update({"version": 2, "torrentDate": True})
+                    f.seek(0)
+                    f.write(json.dumps(config, indent=4, sort_keys=False))
+                    f.truncate()
+                self.config = config
+        except OSError as e:
+            logging.error(e)
+            # if file doesn't exist, we'll create it
+            with open(self.path_to('kinozal.json'), 'w') as f:
+                f.write(json.dumps(self.config, indent=4, sort_keys=False))
+
+        # establish connection
+        self.session = build_opener()
 
         # add proxy handler if needed
         if self.config['proxy'] and any(self.config['proxies'].keys()):
@@ -70,26 +78,60 @@ class kinozal(object):
         self.session.addheaders.pop()
         self.session.addheaders.append(('User-Agent', self.config['ua']))
 
+        # avoid endless waiting
+        self.blocked = False
+
+        mcj = MozillaCookieJar()
+        cookie_file = os.path.abspath(os.path.join(os.path.dirname(__file__), 'kinozal.cookie'))
+        # load local cookies
+        if os.path.isfile(cookie_file):
+            mcj.load(cookie_file, ignore_discard=True)
+            if 'uid' in [cookie.name for cookie in mcj]:
+                # if cookie.expires < int(time.time())
+                logging.info("Local cookies is loaded")
+                self.session.add_handler(HTTPCookieProcessor(mcj))
+            else:
+                logging.info("Local cookies expired or bad")
+                logging.debug(f"That we have: {[cookie for cookie in mcj]}")
+                mcj.clear()
+                self.login(mcj, cookie_file)
+        else:
+            self.login(mcj, cookie_file)
+
+    def login(self, mcj, cookie_file):
+        self.session.add_handler(HTTPCookieProcessor(mcj))
+
         form_data = {"username": self.config['username'], "password": self.config['password']}
         # so we first encode keys to cp1251 then do default decode whole string
         data_encoded = urlencode({k: v.encode('cp1251') for k, v in form_data.items()}).encode()
 
         self._catch_error_request(self.url + '/takelogin.php', data_encoded)
-        if not self.blocked:
-            if 'uid' not in [cookie.name for cookie in cj]:
-                logging.warning("we not authorized, please check your credentials")
-            else:
-                logging.info('We successfully authorized')
+        if 'uid' not in [cookie.name for cookie in mcj]:
+            logging.warning("we not authorized, please check your credentials")
+        else:
+            mcj.save(cookie_file, ignore_discard=True, ignore_expires=True)
+            logging.info('We successfully authorized')
 
     def draw(self, html: str):
         torrents = re.findall(r'nam"><a\s+?href="(.+?)"\s+?class="r\d">(.*?)</a>'
-                              r'.+?s\'>.+?s\'>(.*?)<.+?sl_s\'>(\d+)<.+?sl_p\'>(\d+)<', html, re.S)
-
+                              r'.+?s\'>.+?s\'>(.*?)<.+?sl_s\'>(\d+)<.+?sl_p\'>(\d+)<.+?s\'>(.*?)</td>', html, re.S)
+        today, yesterday = time.strftime("%y.%m.%d"), time.strftime("%y.%m.%d", time.localtime(time.time()-86400))
         for tor in torrents:
+            torrent_date = ""
+            if self.config['torrentDate']:
+                ct = tor[5].split()[0]
+                if "сегодня" in ct:
+                    torrent_date = today
+                elif "вчера" in ct:
+                    # yeah this is yesterday
+                    torrent_date = yesterday
+                else:
+                    torrent_date = time.strftime("%y.%m.%d", time.strptime(ct, "%d.%m.%Y"))
+                torrent_date = f'[{torrent_date}] '
             torrent = {"engine_url": self.url,
                        "desc_link": self.url + tor[0],
-                       "name": tor[1],
-                       "link": 'http://dl.kinozal.tv/download.php?id=' + tor[0].split('=')[1],
+                       "name": torrent_date + tor[1],
+                       "link": "http://dl.kinozal.tv/download.php?id=" + tor[0].split("=")[1],
                        "size": self.units_convert(tor[2]),
                        "seeds": tor[3],
                        "leech": tor[4]}
@@ -97,6 +139,9 @@ class kinozal(object):
             prettyPrinter(torrent)
         del torrents
         # return len(torrents)
+
+    def path_to(self, *file):
+        return os.path.abspath(os.path.join(os.path.dirname(__file__), *file))
 
     @staticmethod
     def units_convert(unit):
@@ -112,7 +157,7 @@ class kinozal(object):
         # choose download method
         if self.config.get("magnet"):
             res = self._catch_error_request(self.url + "/get_srv_details.php?action=2&id=" + url.split("=")[1])
-            # magnet = re.search(":\s([A-Z0-9]{40})\<", res.read().decode())[1]
+            # magnet = re.search(":\s([A-Z0-9]{40})<", res.read().decode())[1]
             magnet = 'magnet:?xt=urn:btih:' + res.read().decode()[18:58]
             # return magnet link
             logging.debug(magnet + " " + url)
@@ -141,36 +186,18 @@ class kinozal(object):
 
         return total
 
-    def search_old(self, what, cat='all'):
-        if self.blocked:
-            return
-        total, current = -1, 0
-        while total != current:
-            query = '{}/browse.php?s={}&c={}&page={}'.format(self.url, what.replace(" ", "+"),
-                                                             self.supported_categories[cat],
-                                                             math.ceil(current / 50))
-            response = self._catch_error_request(query)
-            page = response.read().decode('cp1251')
-            if total == -1:
-                total = int(re.search(r'</span>Найдено\s+?(\d+)\s+?раздач</td>', page)[1])
-            current += self.draw(page)
-
-        logging.debug("--- {} seconds ---".format(time.time() - start_time))
-        logging.info("Found torrents: {}".format(total))
-
     def search(self, what, cat='all'):
         if self.blocked:
             return
-        query = '{}/browse.php?s={}&c={}'.format(self.url, what.replace(" ", "+"),
-                                                 self.supported_categories[cat])
+        query = f'{self.url}/browse.php?s={what.replace(" ", "+")}&c={self.supported_categories[cat]}'
 
         # make first request (maybe it enough)
         total = self.searching(query, True)
         # do async requests
         if total > 50:
             tasks = []
-            for x in range(1, math.ceil(total / 50)):
-                task = threading.Thread(target=self.searching, args=(query + "&page={}".format(x),))
+            for x in range(1, -(-total//50)):
+                task = threading.Thread(target=self.searching, args=(query + f"&page={x}",))
                 tasks.append(task)
                 task.start()
 
@@ -179,11 +206,11 @@ class kinozal(object):
                 task.join()
             del tasks
 
-        logging.debug("--- {} seconds ---".format(time.time() - start_time))
-        logging.info("Found torrents: {}".format(total))
+        logging.debug(f"--- {time.time() - start_time} seconds ---")
+        logging.info(f"Found torrents: {total}")
 
     def _catch_error_request(self, url='', data=None):
-        url = url if url else self.url
+        url = url or self.url
 
         try:
             response = self.session.open(url, data)
@@ -191,7 +218,7 @@ class kinozal(object):
             if response.getcode() != 200:
                 logging.error('Unable connect')
                 raise HTTPError(response.geturl(), response.getcode(),
-                                "HTTP request to {} failed with status: {}".format(url, response.getcode()),
+                                f"HTTP request to {url} failed with status: {response.getcode()}",
                                 response.info(), None)
         except (URLError, HTTPError) as e:
             logging.error(e)
@@ -200,15 +227,16 @@ class kinozal(object):
         # checking that tracker is'nt blocked
         self.blocked = False
         if self.url not in response.geturl():
-            logging.warning("{} is blocked. Try proxy or another proxy".format(self.url))
+            logging.warning(f"{self.url} is blocked. Try proxy or another proxy")
             self.blocked = True
 
         return response
 
 
 if __name__ == "__main__":
-    # f = open("result.html", "r")
+    # benchmark start
+    start_time = time.time()
     kinozal_se = kinozal()
-    # kinozal_se.draw(f.read())
     kinozal_se.search('doctor')
     print("--- %s seconds ---" % (time.time() - start_time))
+    # benchmark end

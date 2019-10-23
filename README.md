@@ -11,12 +11,13 @@ One of biggest russian torrent tracker.
 
 ## Installation
 According of the name of search plugin:
-* Edit `*.json` file by replacing `USERNAME` and `PASSWORD` with your torrent tracker username and password.
+* After installation edit `*.json` file by replacing `USERNAME` and `PASSWORD` with your torrent tracker username and password.
+
 * If tracker is blocked in your country, in same file:
   * find `"proxy": false` and switch in `true` (`"proxy": true`)
   * add proxy links working for you in `proxies` (`{"http": "proxy.example.org:8080"}`)
   * *make sure that your proxy work with right protocol*
-* Move `*.json` and `*.png` to qBittorrent search engines directory:
+* **_Optionally_**: move `*.ico` to qBittorrent search engines directory:
   * Windows: `%localappdata%\qBittorrent\nova3\engines\`
   * Linux: `~/.local/share/data/qBittorrent/nova3/engines/`
   * OS X: `~/Library/Application Support/qBittorrent/nova3/engines/`
@@ -24,7 +25,6 @@ According of the name of search plugin:
 
 ## Troubleshooting
 :warning: If the plugin is't installed with a message about the incompatibility of the plugin:
- * check that you added all included files
  * if torrent tracker is't avalaible for you in web - configure the proxy in `*.json` file
 
 All other errors and warnings you can see in log file `*.log`:

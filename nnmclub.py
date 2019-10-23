@@ -32,7 +32,7 @@ class nnmclub(object):
     # default config for nnmclub.json
     config = {
         "version": 2,
-        "torrentDate": False,
+        "torrentDate": True,
         "username": "USERNAME",
         "password": "PASSWORD",
         "proxy": False,
@@ -55,7 +55,7 @@ class nnmclub(object):
             with open(self.path_to('nnmclub.json'), 'r+') as f:
                 config = json.load(f)
                 if "version" not in config.keys():
-                    config.update({"version": 2, "torrentDate": False})
+                    config.update({"version": 2, "torrentDate": True})
                     f.seek(0)
                     f.write(json.dumps(config, indent=4, sort_keys=False))
                     f.truncate()
@@ -128,7 +128,7 @@ class nnmclub(object):
         for tor in torrents:
             torrent_date = ""
             if self.config['torrentDate']:
-                torrent_date = f'[{time.strftime("%d.%m.%y", time.localtime(int(tor[6])))}] '
+                torrent_date = f'[{time.strftime("%y.%m.%d", time.localtime(int(tor[6])))}] '
             torrent = {"engine_url": self.url,
                        "desc_link": self.url + tor[0],
                        "name": torrent_date + tor[1],
