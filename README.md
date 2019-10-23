@@ -10,18 +10,22 @@ You can turn off the magnet link: in `kinozal.json` switch `"magnet": true` to `
 One of biggest russian torrent tracker.
 
 ## Installation
+**For fresh installation.**
 According of the name of search plugin:
-* After installation edit `*.json` file by replacing `USERNAME` and `PASSWORD` with your torrent tracker username and password.
-
+* Copy the plugin to the directory according to your operating system:
+  * Windows: `%localappdata%\qBittorrent\nova3\engines\`
+  * Linux: `~/.local/share/data/qBittorrent/nova3/engines/`
+  * OS X: `~/Library/Application Support/qBittorrent/nova3/engines/`
+* Then open copied `*.py` file and find from above the section with `config = { ... }` and replace `USERNAME` and `PASSWORD` with your torrent tracker username and password.
 * If tracker is blocked in your country, in same file:
   * find `"proxy": false` and switch in `true` (`"proxy": true`)
   * add proxy links working for you in `proxies` (`{"http": "proxy.example.org:8080"}`)
   * *make sure that your proxy work with right protocol*
-* **_Optionally_**: move `*.ico` to qBittorrent search engines directory:
-  * Windows: `%localappdata%\qBittorrent\nova3\engines\`
-  * Linux: `~/.local/share/data/qBittorrent/nova3/engines/`
-  * OS X: `~/Library/Application Support/qBittorrent/nova3/engines/`
+* **_Optionally_**: move `*.ico` to same directory.
 * Then follow [official tutorial](https://github.com/qbittorrent/search-plugins/wiki/Install-search-plugins).
+* _After installation you can change your settings with `*.json` file which will be created automatically in same directory._
+
+**For update just reinstall `*.py` file.**
 
 ## Troubleshooting
 :warning: If the plugin is't installed with a message about the incompatibility of the plugin:
