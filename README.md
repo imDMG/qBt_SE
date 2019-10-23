@@ -17,7 +17,7 @@ According of the name of search plugin:
   * Linux: `~/.local/share/data/qBittorrent/nova3/engines/`
   * OS X: `~/Library/Application Support/qBittorrent/nova3/engines/`
 * Then open copied `*.py` file and find from above the section with `config = { ... }`. Replace `USERNAME` and `PASSWORD` with your torrent tracker username and password. If tracker is blocked in your country, in same section:
-  * find `"proxy": false` and switch in `true` (`"proxy": true`)
+  * find `"proxy": False` and switch in `True` (`"proxy": True`)
   * add proxy links working for you in `proxies` (`{"http": "proxy.example.org:8080"}`)
   * *make sure that your proxy work with right protocol*
 * **_Optionally_**: move `*.ico` to same directory.
