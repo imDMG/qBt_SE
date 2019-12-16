@@ -1,7 +1,7 @@
-# VERSION: 2.2
+# VERSION: 1.0
 # AUTHORS: imDMG [imdmgg@gmail.com]
 
-# Kinozal.tv search engine plugin for qBittorrent
+# rutracker.org search engine plugin for qBittorrent
 
 import base64
 import json
@@ -12,10 +12,9 @@ import socket
 import tempfile
 import time
 
-from concurrent.futures.thread import ThreadPoolExecutor
-from functools import partial
+from concurrent.futures import ThreadPoolExecutor
 from html import unescape
-from http.cookiejar import MozillaCookieJar
+from http.cookiejar import Cookie, MozillaCookieJar
 from urllib.error import URLError, HTTPError
 from urllib.parse import urlencode, unquote
 from urllib.request import build_opener, HTTPCookieProcessor, ProxyHandler
@@ -33,7 +32,6 @@ config = {
         "http": "",
         "https": ""
     },
-    "magnet": True,
     "ua": "Mozilla/5.0 (X11; Linux i686; rv:38.0) Gecko/20100101 Firefox/38.0 "
 }
 
@@ -43,40 +41,40 @@ def path_to(*file):
 
 
 def rng(t):
-    return range(1, -(-t // 50))
+    return range(50, -(-t // 50) * 50, 50)
 
 
-PATTERNS = (r'</span>Найдено\s+?(\d+)\s+?раздач',
-            r'nam"><a\s+?href="/(.+?)"\s+?class="r\d">(.*?)</a>.+?s\'>.+?s\'>'
-            r'(.*?)<.+?sl_s\'>(\d+)<.+?sl_p\'>(\d+)<.+?s\'>(.*?)</td>',
-            '%sbrowse.php?s=%s&c=%s', "%s&page=%s")
+PATTERNS = (r'(\d{1,3})\s<span',
+            r'bold"\shref="(viewtopic\.php\?t=\d+)">(.+?)</a.+?(dl\.php\?t=\d+)'
+            r'">(.+?)\s&.+?data-ts_text="(.+?)">.+?Личи">(\d+)</.+?data-ts_'
+            r'text="(\d+)"', '%s/tracker.php?nm=%s&c=%s', "%s&start=%s")
 
 FILENAME = __file__[__file__.rfind('/') + 1:-3]
-FILE_J, FILE_C = [path_to(FILENAME + fe) for fe in ['.json', '.cookie']]
+FILE_J, FILE_C = [path_to(FILENAME + fl) for fl in ['.json', '.cookie']]
 
 # base64 encoded image
-ICON = ("AAABAAEAEBAAAAEAIABoBAAAFgAAACgAAAAQAAAAIAAAAAEAIAAAAAAAQAQAAAAAAAAAAA"
-        "AAAAAAAAAAAACARztMgEc7/4BHO/+ARztMAAAAAIBHO0yhd2n/gEc7/6F3af+ARztMAAAA"
-        "AIBHO0yARzv/gEc7/4BHO0wAAAAAgEc7/7iYiv/O4+r/pH5x/4FIPP+kfnH/zsrE/87j6v"
-        "/OycL/pYB1/4BHO/+jfHD/ztbV/7+yrP+ARzv/AAAAAIBHO//O4+r/zu/9/87v/f/O7/3/"
-        "zu/9/87v/f/O7/3/zu/9/87v/f/O7/3/zu/9/87v/f/O1dT/gEc7/wAAAACARztMpYB1/8"
-        "7v/f8IC5X/CAuV/wgLlf8IC5X/zu/9/77h+v9vgcv/SFSy/wAAif97j87/oXdp/4BHO0wA"
-        "AAAAAAAAAIBHO//O7/3/gabq/w4Tnv8OE57/gabq/87v/f96muj/DBCd/wAAif83SMf/zu"
-        "/9/4BHO/8AAAAAAAAAAIBHO0ynhXv/zu/9/87v/f8OE57/CAuV/87v/f+63vn/Hyqx/wAA"
-        "if9KXMX/zO38/87v/f+mhHn/gEc7TAAAAAChd2n/1eHk/87v/f/O7/3/DhOe/wgLlf9nhu"
-        "T/MEPF/wAAif82ScT/utjy/87v/f/O7/3/zsrD/6F3af8AAAAAgEc7/9Pk6v/O7/3/zu/9"
-        "/xQcqP8IC5X/FBqo/xUYlf9of9v/zu/9/87v/f/O7/3/zu/9/87d4f+ARzv/AAAAAIBHO/"
-        "/Y19X/zu/9/87v/f8RGaT/CAuV/wAAif90h8v/zu/9/87v/f/O7/3/zu/9/87v/f/OycL/"
-        "gEc7/wAAAAChd2n/up6S/87v/f/O7/3/ERmk/wgLlf9DXdj/CQ6Z/zdAqf/O7/3/zu/9/8"
-        "7v/f/O7/3/upyQ/6F3af8AAAAAgEc7TIJLQP/P7/3/zu/9/xQcqP8IC5X/zu/9/46l2f8j"
-        "NMD/gJXS/87v/f/O7/3/zu/9/45kXf+ARztMAAAAAAAAAACARzv/0e35/5Go2/8UHKj/CA"
-        "uV/5Go2//O7/3/XHDY/w4Tn/8YHJf/QEms/9Dr9v+ARzv/AAAAAAAAAACARztMu6KY/9Hu"
-        "+v8IC5X/CAuV/wgLlf8IC5X/zu/9/87v/f9OZtz/FB2q/y08wv/Q6/b/oXdp/4BHO0wAAA"
-        "AAgEc7/9/s8P/R7fn/0e77/9Hu+//O7/3/zu/9/87v/f/O7/3/z+/9/9Dt+P/Q7Pf/3u3t"
-        "/87n8P+ARzv/AAAAAIBHO//Sz8j/3+zw/7qhlf+IWE//o31w/9jZ2P/a7fH/2NfV/7ylm/"
-        "+GVEr/qYyD/87o8f/R2dj/gEc7/wAAAACARztMgEc7/4BHO/+ARztMAAAAAIBHO0yARzv/"
-        "gEc7/4BHO/+ARztMAAAAAIBHO0yARzv/gEc7/4BHO0wAAAAACCEAAAABAAAAAQAAAAEAAI"
-        "ADAAAAAQAAAAEAAAABAAAAAQAAAAEAAAABAACAAwAAAAEAAAABAAAAAQAACCEAAA== ")
+ICON = ("AAABAAEAEBAAAAEAIABoBAAAFgAAACgAAAAQAAAAIAAAAAEAIAAAAAAAAAAAABMLAAATCw"
+        "AAAAAAAAAAAAAAAAAAAAAAAAAAAABs3wUAY8wFBGPMBQN2sw8A9kA6AOdOOl/nTjo/5046"
+        "AOdOOgDnTjoA5046AOdOOgHnTjoAAAAAAAAAAAB28wUAY8wFAGPMBWBjzAVWXtEHAMdsKg"
+        "DnTjqf50464+dOOmnnTjoh5046JudOOmLnTjp85046DAAAAAAAAAAAbN8FAGPMBQxjzAXA"
+        "Y8wF1WPMBSNX2AAA9z86nehNOv/nTjr750464+dOOubnTjr/5046oedOOgMAAAAAdfEFAG"
+        "PMBQBjzAVPY8wF82PMBf9jzAW0XdEHOt5XNnbhVDSm6U04v+dOOvvnTjr/5046/edOOl3n"
+        "TjoAbN8FDWPMBSljzAVpY8wF3GPMBf9jzAX/Y8wF/2PMBe5Y1wXYS+MAyY2kHHvwRjvr50"
+        "46/+dOOvnnTjpK5046AGPMBZRjzAXpY8wF/WPMBf9jzAX/Y8wF/2PNBP9jzAX/YswF/1rU"
+        "Aa/qSzat5046/udOOv/nTjr/5046iudOOgJjzAUsY8wFq2PMBfxjzAX/Y8wF/2LFDsNfvx"
+        "afY90AzVjhAM/WXy6U6E07+OdOOv/nTjr/5046/+dOOuznTjpbY8wFAGPMBRJjzAWxY8wF"
+        "/2PNA/5cojyQRQD/t0kn36dejFVk+Ek4wedOOv/nTjr/6E447edOOsznTjrI5046pmzfBQ"
+        "BjzAUAY8wFWWPMBf1jzAX/YtgAu0cc7LhGI+T/Nxb+su9LM6zoTjn/8U4v1bBAc2i/R1MT"
+        "/1oLC/dOKgwAAAAAbN8FAGPMBUxjzAX6Y8wF+WPmAK5JKdyiRiPj/zgj8euqPnOP/08e4p"
+        "o6iosuI/zSNyTydS0j/A41JPUAAAAAAG7iBQBjzAVVY8wF2GPkAGFVfHYhRhrvwkYk4v9F"
+        "JOP/WCvPn89BU3w3JfHHRiTi/0Yk4vtGJOKgRiTiEAAAAAB39QUAbeEFHGrsACdGItcBRh"
+        "fzdUYk4vtGJOL/RiTi/0Yk4vA6JO7dRiTi/UYk4t1GJOKNRiTiQk0k+AcAAAAAAAAAAAAA"
+        "AABGF/8ARiTiGkYk4rRGJOLMRiTiz0Yk4vNGJOL/RiTi/0Yk4tNGJOIxRiTiAFMq/wAAAA"
+        "AAAAAAAAAAAAAAAAAAVCv/AE0k+gRNJPoRTST4DkYk4hFGJOJRRiTi3UYk4v9GJOJyRiTi"
+        "AFMq/wAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABTKv8ARiTiAEYk4l"
+        "ZGJOLgRiTiN00k+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+        "AAAAAE0k+ABGJOIIRiTiT0Yk4g9NJPoAAAAAAAAAAAAAAAAA//8AAP//AAD/uwAA+/cAAP"
+        "H3AADgcwAA5+MAAO/PAAD23wAA/v8AAP53AAD+fwAA/58AAP/fAAD//wAA//8AAA==")
 
 # setup logging
 logging.basicConfig(
@@ -88,14 +86,8 @@ logger.setLevel(logging.DEBUG)
 try:
     # try to load user data from file
     with open(FILE_J, 'r+') as f:
-        cfg = json.load(f)
-        if "version" not in cfg.keys():
-            cfg.update({"version": 2, "torrentDate": True})
-            f.seek(0)
-            f.write(json.dumps(cfg, indent=4, sort_keys=False))
-            f.truncate()
-        config = cfg
-    logger.debug("Config is loaded.")
+        config = json.load(f)
+    # logger.debug("Config is loaded.")
 except OSError as e:
     logger.error(e)
     # if file doesn't exist, we'll create it
@@ -107,16 +99,17 @@ except OSError as e:
     logger.debug("Write files.")
 
 
-class kinozal(object):
-    name = 'Kinozal'
-    url = 'http://kinozal.tv/'
-    supported_categories = {'all': '0',
-                            'movies': '1002',
-                            'tv': '1001',
-                            'music': '1004',
-                            'games': '23',
-                            'anime': '20',
-                            'software': '32'}
+class rutracker:
+    name = 'Rutracker'
+    url = 'https://rutracker.org/forum/'
+    supported_categories = {'all': '-1'}
+
+    #                         'movies': '2',
+    #                         'tv': '3',
+    #                         'music': '4',
+    #                         'games': '5',
+    #                         'anime': '6',
+    #                         'software': '7'}
 
     def __init__(self):
         # error message
@@ -141,7 +134,7 @@ class kinozal(object):
         mcj = MozillaCookieJar()
         try:
             mcj.load(FILE_C, ignore_discard=True)
-            if 'uid' in [cookie.name for cookie in mcj]:
+            if 'bb_session' in [cookie.name for cookie in mcj]:
                 # if cookie.expires < int(time.time())
                 logger.info("Local cookies is loaded")
                 self.session.add_handler(HTTPCookieProcessor(mcj))
@@ -175,49 +168,46 @@ class kinozal(object):
         logger.info(f"Found torrents: {total}")
 
     def download_torrent(self, url: str):
-        # choose download method
-        if config.get("magnet"):
-            url = f"{self.url}get_srv_details.php?" \
-                  f"action=2&id={url.split('=')[1]}"
-
-        res = self._catch_error_request(url)
+        # Download url
+        response = self._catch_error_request(url)
         if self.error:
             self.pretty_error(url)
             return
 
-        if config.get("magnet"):
-            path = 'magnet:?xt=urn:btih:' + res.read().decode()[18:58]
-        else:
-            # Create a torrent file
-            file, path = tempfile.mkstemp('.torrent')
-            with os.fdopen(file, "wb") as fd:
-                # Write it to a file
-                fd.write(res.read())
+        # Create a torrent file
+        file, path = tempfile.mkstemp('.torrent')
+        with os.fdopen(file, "wb") as fd:
+            # Write it to a file
+            fd.write(response.read())
 
-        # return magnet link / file path
+        # return file path
         logger.debug(path + " " + url)
         print(path + " " + url)
 
     def login(self, mcj):
         if self.error:
             return
+        # if we wanna use https we mast add ssl=enable_ssl to cookie
+        mcj.set_cookie(Cookie(0, 'ssl', "enable_ssl", None, False,
+                              '.rutracker.org', True, False, '/', True,
+                              False, None, 'ParserCookie', None, None, None))
         self.session.add_handler(HTTPCookieProcessor(mcj))
 
-        form_data = {"username": config['username'],
-                     "password": config['password']}
+        form_data = {"login_username": config['username'],
+                     "login_password": config['password'],
+                     "login": "вход"}
         logger.debug(f"Login. Data before: {form_data}")
         # so we first encode vals to cp1251 then do default decode whole string
         data_encoded = urlencode(
             {k: v.encode('cp1251') for k, v in form_data.items()}).encode()
         logger.debug(f"Login. Data after: {data_encoded}")
-
-        self._catch_error_request(self.url + 'takelogin.php', data_encoded)
+        self._catch_error_request(self.url + 'login.php', data_encoded)
         if self.error:
             return
         logger.debug(f"That we have: {[cookie for cookie in mcj]}")
-        if 'uid' in [cookie.name for cookie in mcj]:
+        if 'bb_session' in [cookie.name for cookie in mcj]:
             mcj.save(FILE_C, ignore_discard=True, ignore_expires=True)
-            logger.info('We successfully authorized')
+            logger.info("We successfully authorized")
         else:
             self.error = "We not authorized, please check your credentials!"
             logger.warning(self.error)
@@ -233,33 +223,18 @@ class kinozal(object):
 
     def draw(self, html: str):
         torrents = re.findall(PATTERNS[1], html, re.S)
-        _part = partial(time.strftime, "%y.%m.%d")
-        # yeah this is yesterday
-        yesterday = _part(time.localtime(time.time() - 86400))
         for tor in torrents:
-            torrent_date = ""
-            if config['torrentDate']:
-                ct = tor[5].split()[0]
-                if "сегодня" in ct:
-                    torrent_date = _part()
-                elif "вчера" in ct:
-                    torrent_date = yesterday
-                else:
-                    torrent_date = _part(time.strptime(ct, "%d.%m.%Y"))
-                torrent_date = f'[{torrent_date}] '
-
-            # replace size units
-            table = {'Т': 'T', 'Г': 'G', 'М': 'M', 'К': 'K', 'Б': 'B'}
+            local = time.strftime("%y.%m.%d", time.localtime(int(tor[6])))
+            torrent_date = f"[{local}] " if config['torrentDate'] else ""
 
             prettyPrinter({
                 "engine_url": self.url,
                 "desc_link": self.url + tor[0],
                 "name": torrent_date + unescape(tor[1]),
-                "link": "http://dl.kinozal.tv/download.php?id=" +
-                        tor[0].split("=")[1],
-                "size": tor[2].translate(tor[2].maketrans(table)),
-                "seeds": tor[3],
-                "leech": tor[4]
+                "link": self.url + tor[2],
+                "size": unescape(tor[3]),
+                "seeds": tor[4] if tor[4].isdigit() else '0',
+                "leech": tor[5]
             })
         del torrents
 
@@ -301,5 +276,5 @@ class kinozal(object):
 
 
 if __name__ == "__main__":
-    engine = kinozal()
+    engine = rutracker()
     engine.search('doctor')
