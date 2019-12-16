@@ -15,7 +15,7 @@ One of biggest russian torrent tracker.
 ## Installation
 **For fresh installation.**
 According of the name of search plugin:
-* Save (`*.py`) file on your computer
+* Save `*.py` file on your computer
 * Then open `*.py` file and find from above the section with `config = { ... }`. Replace `USERNAME` and `PASSWORD` with your torrent tracker username and password. If tracker is blocked in your country, in same section:
   * find `"proxy": False` and switch in `True` (`"proxy": True`)
   * add proxy links working for you in `proxies` (`{"http": "proxy.example.org:8080"}`)
