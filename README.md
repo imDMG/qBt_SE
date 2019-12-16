@@ -1,5 +1,8 @@
 # qBittorrent plugins
 
+## Rutracker.org
+Biggest russian torrent tracker.
+
 ## Kinozal.tv
 Russian torrent tracker mostly directed on movies, but have other categories.
 
@@ -12,25 +15,18 @@ One of biggest russian torrent tracker.
 ## Installation
 **For fresh installation.**
 According of the name of search plugin:
-* Copy the plugin (`*.py`) to the directory according to your operating system:
-  * Windows: `%localappdata%\qBittorrent\nova3\engines\`
-  * Linux: `~/.local/share/data/qBittorrent/nova3/engines/`
-  * OS X: `~/Library/Application Support/qBittorrent/nova3/engines/`
-* Then open copied `*.py` file and find from above the section with `config = { ... }`. Replace `USERNAME` and `PASSWORD` with your torrent tracker username and password. If tracker is blocked in your country, in same section:
+* Save (`*.py`) file on your computer
+* Then open `*.py` file and find from above the section with `config = { ... }`. Replace `USERNAME` and `PASSWORD` with your torrent tracker username and password. If tracker is blocked in your country, in same section:
   * find `"proxy": False` and switch in `True` (`"proxy": True`)
   * add proxy links working for you in `proxies` (`{"http": "proxy.example.org:8080"}`)
   * *make sure that your proxy work with right protocol*
-* **_Optionally_**: move `*.ico` to same directory.
 * Then follow [official tutorial](https://github.com/qbittorrent/search-plugins/wiki/Install-search-plugins).
-* _After installation you can change your settings with `*.json` file which will be created automatically in same directory._
+* _After installation you can change your settings with `*.json` file which will be created automatically in:_
+  * Windows: `%localappdata%\qBittorrent\logs\`
+  * Linux: `~/.local/share/data/qBittorrent/logs/`
+  * OS X: `~/Library/Application Support/qBittorrent/logs/`_
 
 **For update just reinstall `*.py` file.**
 
 ## Troubleshooting
-:warning: If the plugin is't installed with a message about the incompatibility of the plugin:
- * if torrent tracker is't avalaible for you in web - configure the proxy in `*.json` file
-
-All other errors and warnings you can see in log file `*.log`:
-  * Windows: `%localappdata%\qBittorrent\logs\`
-  * Linux: `~/.local/share/data/qBittorrent/logs/`
-  * OS X: `~/Library/Application Support/qBittorrent/logs/`
+All errors will appear directly in qBittorrent as searching result.
