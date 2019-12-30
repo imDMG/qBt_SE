@@ -46,7 +46,7 @@ def rng(t):
 
 PATTERNS = (r'(\d{1,3})\s<span',
             r'bold"\shref="(viewtopic\.php\?t=\d+)">(.+?)</a.+?(dl\.php\?t=\d+)'
-            r'">(.+?)\s&.+?data-ts_text="(.+?)">.+?Личи">(\d+)</.+?data-ts_'
+            r'" >(.+?)\s&.+?data-ts_text="(.+?)">.+?Личи">(\d+)</.+?data-ts_'
             r'text="(\d+)"', '%s/tracker.php?nm=%s&c=%s', "%s&start=%s")
 
 FILENAME = __file__[__file__.rfind('/') + 1:-3]
