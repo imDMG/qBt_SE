@@ -105,7 +105,7 @@ except OSError as e:
     logger.debug("Write files.")
 
 
-class nnmclub(object):
+class nnmclub:
     name = 'NoNaMe-Club'
     url = 'https://nnmclub.to/forum/'
     url_dl = 'https://nnm-club.ws/'
