@@ -1,4 +1,4 @@
-# VERSION: 2.2
+# VERSION: 2.3
 # AUTHORS: imDMG [imdmgg@gmail.com]
 
 # Kinozal.tv search engine plugin for qBittorrent
@@ -107,9 +107,10 @@ except OSError as e:
     logger.debug("Write files.")
 
 
-class kinozal(object):
+class kinozal:
     name = 'Kinozal'
     url = 'http://kinozal.tv/'
+    url_dl = url.replace("//", "//dl.")
     supported_categories = {'all': '0',
                             'movies': '1002',
                             'tv': '1001',
@@ -255,8 +256,7 @@ class kinozal(object):
                 "engine_url": self.url,
                 "desc_link": self.url + tor[0],
                 "name": torrent_date + unescape(tor[1]),
-                "link": "http://dl.kinozal.tv/download.php?id=" +
-                        tor[0].split("=")[1],
+                "link": self.url_dl + "download.php?id=" + tor[0].split("=")[1],
                 "size": tor[2].translate(tor[2].maketrans(table)),
                 "seeds": tor[3],
                 "leech": tor[4]
@@ -269,7 +269,7 @@ class kinozal(object):
         try:
             response = self.session.open(url, data, 5)
             # checking that tracker is'nt blocked
-            if self.url not in response.geturl():
+            if not response.geturl().startswith((self.url, self.url_dl)):
                 raise URLError(f"{self.url} is blocked. Try another proxy.")
         except (socket.error, socket.timeout) as err:
             if not retrieve:

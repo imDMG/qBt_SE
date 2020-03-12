@@ -1,4 +1,4 @@
-# VERSION: 1.0
+# VERSION: 1.1
 # AUTHORS: imDMG [imdmgg@gmail.com]
 
 # rutracker.org search engine plugin for qBittorrent
@@ -87,7 +87,7 @@ try:
     # try to load user data from file
     with open(FILE_J, 'r+') as f:
         config = json.load(f)
-    # logger.debug("Config is loaded.")
+    logger.debug("Config is loaded.")
 except OSError as e:
     logger.error(e)
     # if file doesn't exist, we'll create it
@@ -244,7 +244,7 @@ class rutracker:
         try:
             response = self.session.open(url, data, 5)
             # checking that tracker is'nt blocked
-            if self.url not in response.geturl():
+            if not response.geturl().startswith(self.url):
                 raise URLError(f"{self.url} is blocked. Try another proxy.")
         except (socket.error, socket.timeout) as err:
             if not retrieve:

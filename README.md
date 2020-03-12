@@ -3,6 +3,9 @@
 ## Rutracker.org
 Biggest russian torrent tracker.
 
+## Rutor.org
+Popular free russian torrent tracker.
+
 ## Kinozal.tv
 Russian torrent tracker mostly directed on movies, but have other categories.
 
@@ -22,9 +25,9 @@ According of the name of search plugin:
   * *make sure that your proxy work with right protocol*
 * Then follow [official tutorial](https://github.com/qbittorrent/search-plugins/wiki/Install-search-plugins).
 * _After installation you can change your settings with `*.json` file which will be created automatically in:_
-  * Windows: `%localappdata%\qBittorrent\logs\`
-  * Linux: `~/.local/share/data/qBittorrent/logs/`
-  * OS X: `~/Library/Application Support/qBittorrent/logs/`_
+  * Windows: `%localappdata%\qBittorrent\nova3\engines\`
+  * Linux: `~/.local/share/data/qBittorrent/nova3/engines`
+  * OS X: `~/Library/Application Support/qBittorrent/nova3/engines`
 
 **For update just reinstall `*.py` file.**
 
