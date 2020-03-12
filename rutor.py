@@ -4,9 +4,6 @@
 # Rutor.is search engine plugin for qBittorrent
 
 
-# gai\"><td>(.+?)</td.+?(/torrent/(\d+).+?)\">(.+?)<\/a.+?right\">(\d+)<
-
-
 import base64
 import json
 import logging

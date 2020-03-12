@@ -25,7 +25,7 @@ According of the name of search plugin:
   * *make sure that your proxy work with right protocol*
 * Then follow [official tutorial](https://github.com/qbittorrent/search-plugins/wiki/Install-search-plugins).
 * _After installation you can change your settings with `*.json` file which will be created automatically in:_
-  * Windows: `%localappdata%\qBittorrent\nova3\engines\`
+  * Windows: `%localappdata%\qBittorrent\nova3\engines`
   * Linux: `~/.local/share/data/qBittorrent/nova3/engines`
   * OS X: `~/Library/Application Support/qBittorrent/nova3/engines`
 
