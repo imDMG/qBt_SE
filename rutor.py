@@ -1,7 +1,7 @@
 # VERSION: 1.0
 # AUTHORS: imDMG [imdmgg@gmail.com]
 
-# Rutor.is search engine plugin for qBittorrent
+# Rutor.org search engine plugin for qBittorrent
 
 
 import base64
