@@ -2,7 +2,7 @@ from concurrent.futures.thread import ThreadPoolExecutor
 from urllib.request import build_opener, ProxyHandler
 
 HOST = "http://kinozal.tv/"
-SCHEME = HOST[:4]
+SCHEME = HOST[:HOST.rfind("://")]
 PROXY_FILE = "proxylist.txt"  # one address per line
 
 
