@@ -16,7 +16,7 @@ def print_good_proxy(proxy):
     except Exception as e:
         return e
 
-    print(f"{proxy}")
+    print(proxy)
 
 
 def main():
