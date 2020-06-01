@@ -1,4 +1,4 @@
-# VERSION: 2.3
+# VERSION: 2.4
 # AUTHORS: imDMG [imdmgg@gmail.com]
 
 # NoNaMe-Club search engine plugin for qBittorrent
@@ -11,8 +11,8 @@ import re
 import socket
 import tempfile
 import time
-
 from concurrent.futures import ThreadPoolExecutor
+from html import unescape
 from http.cookiejar import Cookie, MozillaCookieJar
 from urllib.error import URLError, HTTPError
 from urllib.parse import urlencode, unquote
@@ -140,8 +140,8 @@ class nnmclub:
         mcj = MozillaCookieJar()
         try:
             mcj.load(FILE_C, ignore_discard=True)
-            if 'phpbb2mysql_4_sid' in [cookie.name for cookie in mcj]:
-                # if cookie.expires < int(time.time())
+            key = 'phpbb2mysql_4_data'
+            if [True for c in mcj if c.name == key and c.expires > time.time()]:
                 logger.info("Local cookies is loaded")
                 self.session.add_handler(HTTPCookieProcessor(mcj))
             else:
@@ -195,9 +195,9 @@ class nnmclub:
         if self.error:
             return
         # if we wanna use https we mast add ssl=enable_ssl to cookie
-        mcj.set_cookie(Cookie(0, 'ssl', "enable_ssl", None, False,
-                              '.nnmclub.to', True, False, '/', True,
-                              False, None, 'ParserCookie', None, None, None))
+        mcj.set_cookie(Cookie(0, "ssl", "enable_ssl", None, False,
+                              ".nnmclub.to", True, False, "/", True,
+                              False, None, False, None, None, {}))
         self.session.add_handler(HTTPCookieProcessor(mcj))
 
         response = self._catch_error_request(self.url + 'login.php')
@@ -236,7 +236,7 @@ class nnmclub:
             prettyPrinter({
                 "engine_url": self.url,
                 "desc_link": self.url + tor[0],
-                "name": torrent_date + tor[1],
+                "name": torrent_date + unescape(tor[1]),
                 "link": self.url + tor[2],
                 "size": tor[3].replace(',', '.'),
                 "seeds": tor[4],
@@ -249,6 +249,11 @@ class nnmclub:
         if not response:
             return None
         page = response.read().decode('cp1251')
+        if first and page.find(f'Выход [ {config["username"]} ]') == -1:
+            logger.debug("Looks like we lost session id, lets login")
+            self.login(MozillaCookieJar())
+            if self.error:
+                return None
         self.draw(page)
 
         return int(re.search(PATTERNS[0], page)[1]) if first else -1
