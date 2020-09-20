@@ -1,9 +1,10 @@
-# VERSION: 2.3
+# VERSION: 2.4
 # AUTHORS: imDMG [imdmgg@gmail.com]
 
 # Kinozal.tv search engine plugin for qBittorrent
 
 import base64
+import gzip
 import json
 import logging
 import os
@@ -24,7 +25,7 @@ from novaprinter import prettyPrinter
 
 # default config
 config = {
-    "version": 2,
+    "version": 3,
     "torrentDate": True,
     "username": "USERNAME",
     "password": "PASSWORD",
@@ -46,12 +47,13 @@ def rng(t):
     return range(1, -(-t // 50))
 
 
-PATTERNS = (r'</span>Найдено\s+?(\d+)\s+?раздач',
-            r'nam"><a\s+?href="/(.+?)"\s+?class="r\d">(.*?)</a>.+?s\'>.+?s\'>'
-            r'(.*?)<.+?sl_s\'>(\d+)<.+?sl_p\'>(\d+)<.+?s\'>(.*?)</td>',
-            '%sbrowse.php?s=%s&c=%s', "%s&page=%s")
+RE_TORRENTS = re.compile(
+    r'nam"><a\s+?href="/(.+?)"\s+?class="r\d">(.+?)</a>.+?s\'>.+?s\'>(.+?)<.+?'
+    r'sl_s\'>(\d+?)<.+?sl_p\'>(\d+?)<.+?s\'>(.+?)</td>', re.S)
+RE_RESULTS = re.compile(r'</span>Найдено\s+?(\d+?)\s+?раздач', re.S)
+PATTERNS = ('%sbrowse.php?s=%s&c=%s', "%s&page=%s")
 
-FILENAME = __file__[__file__.rfind('/') + 1:-3]
+FILENAME = os.path.basename(__file__)[:-3]
 FILE_J, FILE_C = [path_to(FILENAME + fe) for fe in ['.json', '.cookie']]
 
 # base64 encoded image
@@ -81,9 +83,10 @@ ICON = ("AAABAAEAEBAAAAEAIABoBAAAFgAAACgAAAAQAAAAIAAAAAEAIAAAAAAAQAQAAAAAAAAAAA"
 # setup logging
 logging.basicConfig(
     format="%(asctime)s %(name)-12s %(levelname)-8s %(message)s",
-    datefmt="%m-%d %H:%M")
+    datefmt="%m-%d %H:%M",
+    level=logging.DEBUG)
+
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.DEBUG)
 
 try:
     # try to load user data from file
@@ -111,6 +114,7 @@ class kinozal:
     name = 'Kinozal'
     url = 'http://kinozal.tv/'
     url_dl = url.replace("//", "//dl.")
+    url_login = url + 'takelogin.php'
     supported_categories = {'all': '0',
                             'movies': '1002',
                             'tv': '1001',
@@ -135,8 +139,7 @@ class kinozal:
                 self.error = "Proxy enabled, but not set!"
 
         # change user-agent
-        self.session.addheaders.pop()
-        self.session.addheaders.append(('User-Agent', config['ua']))
+        self.session.addheaders = [('User-Agent', config['ua'])]
 
         # load local cookies
         mcj = MozillaCookieJar()
@@ -157,18 +160,18 @@ class kinozal:
     def search(self, what, cat='all'):
         if self.error:
             self.pretty_error(what)
-            return
-        query = PATTERNS[2] % (self.url, what.replace(" ", "+"),
+            return None
+        query = PATTERNS[0] % (self.url, what.replace(" ", "+"),
                                self.supported_categories[cat])
 
         # make first request (maybe it enough)
         t0, total = time.time(), self.searching(query, True)
         if self.error:
             self.pretty_error(what)
-            return
+            return None
         # do async requests
         if total > 50:
-            qrs = [PATTERNS[3] % (query, x) for x in rng(total)]
+            qrs = [PATTERNS[1] % (query, x) for x in rng(total)]
             with ThreadPoolExecutor(len(qrs)) as executor:
                 executor.map(self.searching, qrs, timeout=30)
 
@@ -181,19 +184,21 @@ class kinozal:
             url = f"{self.url}get_srv_details.php?" \
                   f"action=2&id={url.split('=')[1]}"
 
-        res = self._catch_error_request(url)
+        response = self._catch_error_request(url)
         if self.error:
             self.pretty_error(url)
-            return
+            return None
 
         if config.get("magnet"):
-            path = 'magnet:?xt=urn:btih:' + res.read().decode()[18:58]
+            if response.startswith(b"\x1f\x8b\x08"):
+                response = gzip.decompress(response)
+            path = 'magnet:?xt=urn:btih:' + response.decode()[18:58]
         else:
             # Create a torrent file
             file, path = tempfile.mkstemp('.torrent')
             with os.fdopen(file, "wb") as fd:
                 # Write it to a file
-                fd.write(res.read())
+                fd.write(response)
 
         # return magnet link / file path
         logger.debug(path + " " + url)
@@ -201,7 +206,7 @@ class kinozal:
 
     def login(self, mcj):
         if self.error:
-            return
+            return None
         self.session.add_handler(HTTPCookieProcessor(mcj))
 
         form_data = {"username": config['username'],
@@ -212,9 +217,9 @@ class kinozal:
             {k: v.encode('cp1251') for k, v in form_data.items()}).encode()
         logger.debug(f"Login. Data after: {data_encoded}")
 
-        self._catch_error_request(self.url + 'takelogin.php', data_encoded)
+        self._catch_error_request(self.url_login, data_encoded)
         if self.error:
-            return
+            return None
         logger.debug(f"That we have: {[cookie for cookie in mcj]}")
         if 'uid' in [cookie.name for cookie in mcj]:
             mcj.save(FILE_C, ignore_discard=True, ignore_expires=True)
@@ -227,13 +232,20 @@ class kinozal:
         response = self._catch_error_request(query)
         if not response:
             return None
-        page = response.read().decode('cp1251')
+        if response.startswith(b"\x1f\x8b\x08"):
+            response = gzip.decompress(response)
+        page, torrents_found = response.decode('cp1251'), -1
+        if first:
+            # firstly we check if there is a result
+            torrents_found = int(RE_RESULTS.search(page)[1])
+            if not torrents_found:
+                return 0
         self.draw(page)
 
-        return int(re.search(PATTERNS[0], page)[1]) if first else -1
+        return torrents_found
 
     def draw(self, html: str):
-        torrents = re.findall(PATTERNS[1], html, re.S)
+        torrents = RE_TORRENTS.findall(html)
         _part = partial(time.strftime, "%y.%m.%d")
         # yeah this is yesterday
         yesterday = _part(time.localtime(time.time() - 86400))
@@ -256,23 +268,24 @@ class kinozal:
                 "engine_url": self.url,
                 "desc_link": self.url + tor[0],
                 "name": torrent_date + unescape(tor[1]),
-                "link": self.url_dl + "download.php?id=" + tor[0].split("=")[1],
+                "link": f"{self.url_dl}download.php?id={tor[0].split('=')[-1]}",
                 "size": tor[2].translate(tor[2].maketrans(table)),
                 "seeds": tor[3],
                 "leech": tor[4]
             })
         del torrents
 
-    def _catch_error_request(self, url='', data=None, retrieve=False):
+    def _catch_error_request(self, url=None, data=None, repeated=False):
         url = url or self.url
 
         try:
-            response = self.session.open(url, data, 5)
-            # checking that tracker is'nt blocked
-            if not response.geturl().startswith((self.url, self.url_dl)):
+            with self.session.open(url, data, 5) as r:
+                # checking that tracker isn't blocked
+                if r.url.startswith((self.url, self.url_dl)):
+                    return r.read()
                 raise URLError(f"{self.url} is blocked. Try another proxy.")
         except (socket.error, socket.timeout) as err:
-            if not retrieve:
+            if not repeated:
                 return self._catch_error_request(url, data, True)
             logger.error(err)
             self.error = f"{self.url} is not response! Maybe it is blocked."
@@ -283,8 +296,6 @@ class kinozal:
             self.error = err.reason
             if hasattr(err, 'code'):
                 self.error = f"Request to {url} failed with status: {err.code}"
-        else:
-            return response
 
         return None
 

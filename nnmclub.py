@@ -1,4 +1,4 @@
-# VERSION: 2.4
+# VERSION: 2.5
 # AUTHORS: imDMG [imdmgg@gmail.com]
 
 # NoNaMe-Club search engine plugin for qBittorrent
@@ -44,12 +44,13 @@ def rng(t):
     return range(50, -(-t // 50) * 50, 50)
 
 
-PATTERNS = (r'(\d{1,3})\s\(max:',
-            r'd\stopic.+?href="(.+?)".+?<b>(.+?)</b>.+?href="(d.+?)".+?/u>\s'
-            r'(.+?)<.+?b>(\d+)</.+?b>(\d+)<.+?<u>(\d+)</u>',
-            '%stracker.php?nm=%s&%s', "%s&start=%s", r'code"\svalue="(.+?)"')
+RE_TORRENTS = re.compile(
+    r'topictitle"\shref="(.+?)"><b>(.+?)</b>.+?href="(d.+?)".+?<u>(\d+?)</u>.+?'
+    r'<b>(\d+)</b>.+?<b>(\d+)</b>.+?<u>(\d+)</u>', re.S)
+RE_RESULTS = re.compile(r'TP_VER">(?:Результатов\sпоиска:\s(\d{1,3}))?\s', re.S)
+PATTERNS = ('%stracker.php?nm=%s&%s', "%s&start=%s", r'code"\svalue="(.+?)"')
 
-FILENAME = __file__[__file__.rfind('/') + 1:-3]
+FILENAME = os.path.basename(__file__)[:-3]
 FILE_J, FILE_C = [path_to(FILENAME + fe) for fe in ['.json', '.cookie']]
 
 # base64 encoded image
@@ -79,9 +80,10 @@ ICON = ("AAABAAEAEBAAAAEAIABoBAAAFgAAACgAAAAQAAAAIAAAAAEAIAAAAAAAAAAAAAAAAAAAAA"
 # setup logging
 logging.basicConfig(
     format="%(asctime)s %(name)-12s %(levelname)-8s %(message)s",
-    datefmt="%m-%d %H:%M")
+    datefmt="%m-%d %H:%M",
+    level=logging.DEBUG)
+
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.DEBUG)
 
 try:
     # try to load user data from file
@@ -109,6 +111,7 @@ class nnmclub:
     name = 'NoNaMe-Club'
     url = 'https://nnmclub.to/forum/'
     url_dl = 'https://nnm-club.ws/'
+    url_login = url + 'login.php'
     supported_categories = {'all': '-1',
                             'movies': '14',
                             'tv': '27',
@@ -133,8 +136,7 @@ class nnmclub:
                 self.error = "Proxy enabled, but not set!"
 
         # change user-agent
-        self.session.addheaders.pop()
-        self.session.addheaders.append(('User-Agent', config['ua']))
+        self.session.addheaders = [('User-Agent', config['ua'])]
 
         # load local cookies
         mcj = MozillaCookieJar()
@@ -155,19 +157,19 @@ class nnmclub:
     def search(self, what, cat='all'):
         if self.error:
             self.pretty_error(what)
-            return
+            return None
         c = self.supported_categories[cat]
-        query = PATTERNS[2] % (self.url, what.replace(" ", "+"),
+        query = PATTERNS[0] % (self.url, what.replace(" ", "+"),
                                "f=-1" if c == "-1" else "c=" + c)
 
         # make first request (maybe it enough)
         t0, total = time.time(), self.searching(query, True)
         if self.error:
             self.pretty_error(what)
-            return
+            return None
         # do async requests
         if total > 50:
-            qrs = [PATTERNS[3] % (query, x) for x in rng(total)]
+            qrs = [PATTERNS[1] % (query, x) for x in rng(total)]
             with ThreadPoolExecutor(len(qrs)) as executor:
                 executor.map(self.searching, qrs, timeout=30)
 
@@ -179,13 +181,13 @@ class nnmclub:
         response = self._catch_error_request(url)
         if self.error:
             self.pretty_error(url)
-            return
+            return None
 
         # Create a torrent file
         file, path = tempfile.mkstemp('.torrent')
         with os.fdopen(file, "wb") as fd:
             # Write it to a file
-            fd.write(response.read())
+            fd.write(response)
 
         # return file path
         logger.debug(path + " " + url)
@@ -193,17 +195,17 @@ class nnmclub:
 
     def login(self, mcj):
         if self.error:
-            return
+            return None
         # if we wanna use https we mast add ssl=enable_ssl to cookie
         mcj.set_cookie(Cookie(0, "ssl", "enable_ssl", None, False,
                               ".nnmclub.to", True, False, "/", True,
                               False, None, False, None, None, {}))
         self.session.add_handler(HTTPCookieProcessor(mcj))
 
-        response = self._catch_error_request(self.url + 'login.php')
+        response = self._catch_error_request(self.url_login)
         if not response:
             return None
-        code = re.search(PATTERNS[4], response.read().decode('cp1251'))[1]
+        code = re.search(PATTERNS[4], response.decode('cp1251'))[1]
         form_data = {"username": config['username'],
                      "password": config['password'],
                      "autologin": "on",
@@ -213,9 +215,9 @@ class nnmclub:
         data_encoded = urlencode(
             {k: v.encode('cp1251') for k, v in form_data.items()}).encode()
 
-        self._catch_error_request(self.url + 'login.php', data_encoded)
+        self._catch_error_request(self.url_login, data_encoded)
         if self.error:
-            return
+            return None
         logger.debug(f"That we have: {[cookie for cookie in mcj]}")
         if 'phpbb2mysql_4_sid' in [cookie.name for cookie in mcj]:
             mcj.save(FILE_C, ignore_discard=True, ignore_expires=True)
@@ -225,7 +227,7 @@ class nnmclub:
             logger.warning(self.error)
 
     def draw(self, html: str):
-        torrents = re.findall(PATTERNS[1], html, re.S)
+        torrents = RE_TORRENTS.findall(html)
 
         for tor in torrents:
             torrent_date = ""
@@ -238,7 +240,7 @@ class nnmclub:
                 "desc_link": self.url + tor[0],
                 "name": torrent_date + unescape(tor[1]),
                 "link": self.url + tor[2],
-                "size": tor[3].replace(',', '.'),
+                "size": tor[3],
                 "seeds": tor[4],
                 "leech": tor[5]
             })
@@ -248,26 +250,33 @@ class nnmclub:
         response = self._catch_error_request(query)
         if not response:
             return None
-        page = response.read().decode('cp1251')
-        if first and page.find(f'Выход [ {config["username"]} ]') == -1:
-            logger.debug("Looks like we lost session id, lets login")
-            self.login(MozillaCookieJar())
-            if self.error:
-                return None
+        page, torrents_found = response.decode('cp1251'), -1
+        if first:
+            # check login status
+            if f'Выход [ {config["username"]} ]' not in page:
+                logger.debug("Looks like we lost session id, lets login")
+                self.login(MozillaCookieJar())
+                if self.error:
+                    return None
+            # firstly we check if there is a result
+            torrents_found = int(RE_RESULTS.search(page)[1] or 0)
+            if not torrents_found:
+                return 0
         self.draw(page)
 
-        return int(re.search(PATTERNS[0], page)[1]) if first else -1
+        return torrents_found
 
-    def _catch_error_request(self, url='', data=None, retrieve=False):
+    def _catch_error_request(self, url=None, data=None, repeated=False):
         url = url or self.url
 
         try:
-            response = self.session.open(url, data, 5)
-            # checking that tracker is'nt blocked
-            if not response.geturl().startswith((self.url, self.url_dl)):
+            with self.session.open(url, data, 5) as r:
+                # checking that tracker isn't blocked
+                if r.url.startswith((self.url, self.url_dl)):
+                    return r.read()
                 raise URLError(f"{self.url} is blocked. Try another proxy.")
         except (socket.error, socket.timeout) as err:
-            if not retrieve:
+            if not repeated:
                 return self._catch_error_request(url, data, True)
             logger.error(err)
             self.error = f"{self.url} is not response! Maybe it is blocked."
@@ -278,8 +287,6 @@ class nnmclub:
             self.error = err.reason
             if hasattr(err, 'code'):
                 self.error = f"Request to {url} failed with status: {err.code}"
-        else:
-            return response
 
         return None
 

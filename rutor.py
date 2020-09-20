@@ -1,4 +1,4 @@
-# VERSION: 1.0
+# VERSION: 1.1
 # AUTHORS: imDMG [imdmgg@gmail.com]
 
 # Rutor.org search engine plugin for qBittorrent
@@ -44,12 +44,13 @@ def rng(t):
     return range(1, -(-t // 100))
 
 
-PATTERNS = (r'(\d+)\s\(max. 2000\)<table',
-            r'(?:gai|tum)"><td>(.+?)</td.+?(torrent/(\d+).+?)">(.+?)<\/a.+?'
-            r'right">([\d\.]+&nbsp;\w+)</td.+?alt="S"\s/>(.+?)<.+?red">(.+?)<',
-            '%ssearch/%i/%i/000/0/%s')
+RE_TORRENTS = re.compile(
+    r'(?:gai|tum)"><td>(.+?)</td.+?href="/(torrent/(\d+).+?)">(.+?)</a.+?right"'
+    r'>([.\d]+&nbsp;\w+)</td.+?alt="S"\s/>(.+?)</s.+?red">(.+?)</s', re.S)
+RE_RESULTS = re.compile(r'</b>\sРезультатов\sпоиска\s(\d{1,4})\s', re.S)
+PATTERNS = ('%ssearch/%i/%i/000/0/%s',)
 
-FILENAME = __file__[__file__.rfind('/') + 1:-3]
+FILENAME = os.path.basename(__file__)[:-3]
 FILE_J, FILE_C = [path_to(FILENAME + fe) for fe in ['.json', '.cookie']]
 
 # base64 encoded image
@@ -75,9 +76,10 @@ ICON = ("AAABAAEAEBAAAAEAGABoAwAAFgAAACgAAAAQAAAAIAAAAAEAGAAAAAAAAAAAAAAAAAAAAA"
 # setup logging
 logging.basicConfig(
     format="%(asctime)s %(name)-12s %(levelname)-8s %(message)s",
-    datefmt="%m-%d %H:%M")
+    datefmt="%m-%d %H:%M",
+    level=logging.DEBUG)
+
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.DEBUG)
 
 try:
     # try to load user data from file
@@ -98,7 +100,7 @@ except OSError as e:
 class rutor:
     name = 'Rutor'
     url = 'http://rutor.info/'
-    url_dl = url.replace("//", "//d.")
+    url_dl = url.replace("//", "//d.") + "download/"
     supported_categories = {'all': 0,
                             'movies': 1,
                             'tv': 6,
@@ -125,21 +127,20 @@ class rutor:
                 self.error = "Proxy enabled, but not set!"
 
         # change user-agent
-        self.session.addheaders.pop()
-        self.session.addheaders.append(('User-Agent', config['ua']))
+        self.session.addheaders = [('User-Agent', config['ua'])]
 
     def search(self, what, cat='all'):
         if self.error:
             self.pretty_error(what)
-            return
-        query = PATTERNS[2] % (self.url, 0, self.supported_categories[cat],
+            return None
+        query = PATTERNS[0] % (self.url, 0, self.supported_categories[cat],
                                what.replace(" ", "+"))
 
         # make first request (maybe it enough)
         t0, total = time.time(), self.searching(query, True)
         if self.error:
             self.pretty_error(what)
-            return
+            return None
         # do async requests
         if total > 100:
             query = query.replace('h/0', 'h/%i')
@@ -155,13 +156,13 @@ class rutor:
         response = self._catch_error_request(url)
         if self.error:
             self.pretty_error(url)
-            return
+            return None
 
         # Create a torrent file
         file, path = tempfile.mkstemp('.torrent')
         with os.fdopen(file, "wb") as fd:
             # Write it to a file
-            fd.write(response.read())
+            fd.write(response)
 
         # return file path
         logger.debug(path + " " + url)
@@ -171,23 +172,26 @@ class rutor:
         response = self._catch_error_request(query)
         if not response:
             return None
-        page = response.read().decode()
+        page, torrents_found = response.decode(), -1
+        if first:
+            # firstly we check if there is a result
+            torrents_found = int(RE_RESULTS.search(page)[1])
+            if not torrents_found:
+                return 0
         self.draw(page)
 
-        return int(re.search(PATTERNS[0], page)[1]) if first else -1
+        return torrents_found
 
     def draw(self, html: str):
-        torrents = re.findall(PATTERNS[1], html, re.S)
+        torrents = RE_TORRENTS.findall(html)
         for tor in torrents:
             torrent_date = ""
             if config['torrentDate']:
                 # replace names month
-                table = {'Янв': '01', 'Фев': '02', 'Мар': '03', 'Апр': '04',
-                         'Май': '05', 'Июн': '06', 'Июл': '07', 'Авг': '08',
-                         'Сен': '09', 'Окт': '10', 'Ноя': '11', 'Дек': '12'}
-                td = tor[0].split("&nbsp;")
-                td[1] = table[td[1]]
-                ct = " ".join(td)
+                months = ('Янв', 'Фев', 'Мар', 'Апр', 'Май', 'Июн',
+                          'Июл', 'Авг', 'Сен', 'Окт', 'Ноя', 'Дек')
+                ct = [unescape(tor[0].replace(m, f"{i:02d}"))
+                      for i, m in enumerate(months, 1) if m in tor[0]][0]
                 ct = time.strftime("%y.%m.%d", time.strptime(ct, "%d %m %y"))
                 torrent_date = f'[{ct}] '
 
@@ -195,23 +199,24 @@ class rutor:
                 "engine_url": self.url,
                 "desc_link": self.url + tor[1],
                 "name": torrent_date + unescape(tor[3]),
-                "link": self.url_dl + "download/" + tor[2],
+                "link": self.url_dl + tor[2],
                 "size": unescape(tor[4]),
                 "seeds": unescape(tor[5]),
                 "leech": unescape(tor[6])
             })
         del torrents
 
-    def _catch_error_request(self, url='', data=None, retrieve=False):
+    def _catch_error_request(self, url=None, data=None, repeated=False):
         url = url or self.url
 
         try:
-            response = self.session.open(url, data, 5)
-            # checking that tracker is'nt blocked
-            if not response.geturl().startswith((self.url, self.url_dl)):
+            with self.session.open(url, data, 5) as r:
+                # checking that tracker isn't blocked
+                if r.url.startswith((self.url, self.url_dl)):
+                    return r.read()
                 raise URLError(f"{self.url} is blocked. Try another proxy.")
         except (socket.error, socket.timeout) as err:
-            if not retrieve:
+            if not repeated:
                 return self._catch_error_request(url, data, True)
             logger.error(err)
             self.error = f"{self.url} is not response! Maybe it is blocked."
@@ -222,8 +227,6 @@ class rutor:
             self.error = err.reason
             if hasattr(err, 'code'):
                 self.error = f"Request to {url} failed with status: {err.code}"
-        else:
-            return response
 
         return None
 

@@ -1,5 +1,4 @@
-/tests/
-/venv/
+/tests
 /kinozal.cookie
 /kinozal.cookie.bak
 /kinozal.ico
@@ -10,11 +9,11 @@
 /nnmclub.ico
 /nnmclub.json
 /nnmclub.json.bak
+/proxylist.txt
+/rutor.ico
+/rutor.json
 /rutracker.cookie
 /rutracker.cookie.bak
 /rutracker.ico
 /rutracker.json
 /rutracker.json.bak
-/rutor.ico
-/rutor.json
-/proxylist.txt
