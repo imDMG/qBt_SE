@@ -1,4 +1,4 @@
-# VERSION: 2.5
+# VERSION: 2.6
 # AUTHORS: imDMG [imdmgg@gmail.com]
 
 # NoNaMe-Club search engine plugin for qBittorrent
@@ -48,7 +48,8 @@ RE_TORRENTS = re.compile(
     r'topictitle"\shref="(.+?)"><b>(.+?)</b>.+?href="(d.+?)".+?<u>(\d+?)</u>.+?'
     r'<b>(\d+)</b>.+?<b>(\d+)</b>.+?<u>(\d+)</u>', re.S)
 RE_RESULTS = re.compile(r'TP_VER">(?:Результатов\sпоиска:\s(\d{1,3}))?\s', re.S)
-PATTERNS = ('%stracker.php?nm=%s&%s', "%s&start=%s", r'code"\svalue="(.+?)"')
+RE_CODE = re.compile(r'name="code"\svalue="(.+?)"', re.S)
+PATTERNS = ('%stracker.php?nm=%s&%s', "%s&start=%s")
 
 FILENAME = os.path.basename(__file__)[:-3]
 FILE_J, FILE_C = [path_to(FILENAME + fe) for fe in ['.json', '.cookie']]
@@ -205,7 +206,7 @@ class nnmclub:
         response = self._catch_error_request(self.url_login)
         if not response:
             return None
-        code = re.search(PATTERNS[4], response.decode('cp1251'))[1]
+        code = RE_CODE.search(response.decode('cp1251'))[1]
         form_data = {"username": config['username'],
                      "password": config['password'],
                      "autologin": "on",
