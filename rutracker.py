@@ -1,4 +1,4 @@
-# VERSION: 1.3
+# VERSION: 1.4
 # AUTHORS: imDMG [imdmgg@gmail.com]
 
 # rutracker.org search engine plugin for qBittorrent
@@ -6,15 +6,14 @@
 import base64
 import json
 import logging
-import os
 import re
 import socket
-import tempfile
 import time
-
 from concurrent.futures import ThreadPoolExecutor
 from html import unescape
 from http.cookiejar import Cookie, MozillaCookieJar
+from pathlib import Path
+from tempfile import NamedTemporaryFile
 from urllib.error import URLError, HTTPError
 from urllib.parse import urlencode, unquote
 from urllib.request import build_opener, HTTPCookieProcessor, ProxyHandler
@@ -23,7 +22,6 @@ from novaprinter import prettyPrinter
 
 # default config
 config = {
-    "version": 2,
     "torrentDate": True,
     "username": "USERNAME",
     "password": "PASSWORD",
@@ -35,24 +33,26 @@ config = {
     "ua": "Mozilla/5.0 (X11; Linux i686; rv:38.0) Gecko/20100101 Firefox/38.0 "
 }
 
+FILE = Path(__file__)
+BASEDIR = FILE.parent.absolute()
 
-def path_to(*file):
-    return os.path.abspath(os.path.join(os.path.dirname(__file__), *file))
+FILENAME = FILE.name[:-3]
+FILE_J, FILE_C = [BASEDIR / (FILENAME + fl) for fl in ['.json', '.cookie']]
+
+PAGES = 50
 
 
 def rng(t):
-    return range(50, -(-t // 50) * 50, 50)
+    return range(PAGES, -(-t // PAGES) * PAGES, PAGES)
 
 
 RE_TORRENTS = re.compile(
     r'data-topic_id="(\d+?)".+?">(.+?)</a.+?tor-size"\sdata-ts_text="(\d+?)">'
     r'.+?data-ts_text="([-0-9]+?)">.+?Личи">(\d+?)</.+?data-ts_text="(\d+?)">',
-    re.S)
+    re.S
+)
 RE_RESULTS = re.compile(r'Результатов\sпоиска:\s(\d{1,3})\s<span', re.S)
 PATTERNS = ('%s/tracker.php?nm=%s&c=%s', "%s&start=%s")
-
-FILENAME = os.path.basename(__file__)[:-3]
-FILE_J, FILE_C = [path_to(FILENAME + fl) for fl in ['.json', '.cookie']]
 
 # base64 encoded image
 ICON = ("AAABAAEAEBAAAAEAIABoBAAAFgAAACgAAAAQAAAAIAAAAAEAIAAAAAAAAAAAABMLAAATCw"
@@ -82,39 +82,29 @@ ICON = ("AAABAAEAEBAAAAEAIABoBAAAFgAAACgAAAAQAAAAIAAAAAEAIAAAAAAAAAAAABMLAAATCw"
 logging.basicConfig(
     format="%(asctime)s %(name)-12s %(levelname)-8s %(message)s",
     datefmt="%m-%d %H:%M",
-    level=logging.DEBUG)
+    level=logging.DEBUG
+)
 
 logger = logging.getLogger(__name__)
 
 try:
-    # try to load user data from file
-    with open(FILE_J, 'r+') as f:
-        config = json.load(f)
+    config = json.loads(FILE_J.read_text())
     logger.debug("Config is loaded.")
 except OSError as e:
     logger.error(e)
     # if file doesn't exist, we'll create it
-    with open(FILE_J, 'w') as f:
-        f.write(json.dumps(config, indent=4, sort_keys=False))
+    FILE_J.write_text(json.dumps(config, indent=4, sort_keys=False))
     # also write/rewrite ico file
-    with open(path_to(FILENAME + '.ico'), 'wb') as f:
-        f.write(base64.b64decode(ICON))
+    (BASEDIR / (FILENAME + '.ico')).write_bytes(base64.b64decode(ICON))
     logger.debug("Write files.")
 
 
-class rutracker:
+class Rutracker:
     name = 'Rutracker'
     url = 'https://rutracker.org/forum/'
     url_dl = url + 'dl.php?t='
     url_login = url + 'login.php'
     supported_categories = {'all': '-1'}
-
-    #                         'movies': '2',
-    #                         'tv': '3',
-    #                         'music': '4',
-    #                         'games': '5',
-    #                         'anime': '6',
-    #                         'software': '7'}
 
     def __init__(self):
         # error message
@@ -163,7 +153,7 @@ class rutracker:
             self.pretty_error(what)
             return None
         # do async requests
-        if total > 50:
+        if total > PAGES:
             qrs = [PATTERNS[1] % (query, x) for x in rng(total)]
             with ThreadPoolExecutor(len(qrs)) as executor:
                 executor.map(self.searching, qrs, timeout=30)
@@ -179,14 +169,12 @@ class rutracker:
             return None
 
         # Create a torrent file
-        file, path = tempfile.mkstemp('.torrent')
-        with os.fdopen(file, "wb") as fd:
-            # Write it to a file
+        with NamedTemporaryFile(suffix='.torrent', delete=False) as fd:
             fd.write(response)
 
-        # return file path
-        logger.debug(path + " " + url)
-        print(path + " " + url)
+            # return file path
+            logger.debug(fd.name + " " + url)
+            print(fd.name + " " + url)
 
     def login(self, mcj):
         if self.error:
@@ -203,7 +191,8 @@ class rutracker:
         logger.debug(f"Login. Data before: {form_data}")
         # so we first encode vals to cp1251 then do default decode whole string
         data_encoded = urlencode(
-            {k: v.encode('cp1251') for k, v in form_data.items()}).encode()
+            {k: v.encode('cp1251') for k, v in form_data.items()}
+        ).encode()
         logger.debug(f"Login. Data after: {data_encoded}")
         self._catch_error_request(self.url_login, data_encoded)
         if self.error:
@@ -292,6 +281,9 @@ class rutracker:
 
         self.error = None
 
+
+# pep8
+rutracker = Rutracker
 
 if __name__ == "__main__":
     engine = rutracker()

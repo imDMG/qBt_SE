@@ -1,4 +1,4 @@
-# VERSION: 2.4
+# VERSION: 2.5
 # AUTHORS: imDMG [imdmgg@gmail.com]
 
 # Kinozal.tv search engine plugin for qBittorrent
@@ -7,16 +7,15 @@ import base64
 import gzip
 import json
 import logging
-import os
 import re
 import socket
-import tempfile
 import time
-
 from concurrent.futures.thread import ThreadPoolExecutor
 from functools import partial
 from html import unescape
 from http.cookiejar import MozillaCookieJar
+from pathlib import Path
+from tempfile import NamedTemporaryFile
 from urllib.error import URLError, HTTPError
 from urllib.parse import urlencode, unquote
 from urllib.request import build_opener, HTTPCookieProcessor, ProxyHandler
@@ -25,7 +24,6 @@ from novaprinter import prettyPrinter
 
 # default config
 config = {
-    "version": 3,
     "torrentDate": True,
     "username": "USERNAME",
     "password": "PASSWORD",
@@ -38,23 +36,25 @@ config = {
     "ua": "Mozilla/5.0 (X11; Linux i686; rv:38.0) Gecko/20100101 Firefox/38.0 "
 }
 
+FILE = Path(__file__)
+BASEDIR = FILE.parent.absolute()
 
-def path_to(*file):
-    return os.path.abspath(os.path.join(os.path.dirname(__file__), *file))
+FILENAME = FILE.name[:-3]
+FILE_J, FILE_C = [BASEDIR / (FILENAME + fl) for fl in ['.json', '.cookie']]
+
+PAGES = 50
 
 
 def rng(t):
-    return range(1, -(-t // 50))
+    return range(1, -(-t // PAGES))
 
 
 RE_TORRENTS = re.compile(
     r'nam"><a\s+?href="/(.+?)"\s+?class="r\d">(.+?)</a>.+?s\'>.+?s\'>(.+?)<.+?'
-    r'sl_s\'>(\d+?)<.+?sl_p\'>(\d+?)<.+?s\'>(.+?)</td>', re.S)
+    r'sl_s\'>(\d+?)<.+?sl_p\'>(\d+?)<.+?s\'>(.+?)</td>', re.S
+)
 RE_RESULTS = re.compile(r'</span>Найдено\s+?(\d+?)\s+?раздач', re.S)
 PATTERNS = ('%sbrowse.php?s=%s&c=%s', "%s&page=%s")
-
-FILENAME = os.path.basename(__file__)[:-3]
-FILE_J, FILE_C = [path_to(FILENAME + fe) for fe in ['.json', '.cookie']]
 
 # base64 encoded image
 ICON = ("AAABAAEAEBAAAAEAIABoBAAAFgAAACgAAAAQAAAAIAAAAAEAIAAAAAAAQAQAAAAAAAAAAA"
@@ -84,33 +84,24 @@ ICON = ("AAABAAEAEBAAAAEAIABoBAAAFgAAACgAAAAQAAAAIAAAAAEAIAAAAAAAQAQAAAAAAAAAAA"
 logging.basicConfig(
     format="%(asctime)s %(name)-12s %(levelname)-8s %(message)s",
     datefmt="%m-%d %H:%M",
-    level=logging.DEBUG)
+    level=logging.DEBUG
+)
 
 logger = logging.getLogger(__name__)
 
 try:
-    # try to load user data from file
-    with open(FILE_J, 'r+') as f:
-        cfg = json.load(f)
-        if "version" not in cfg.keys():
-            cfg.update({"version": 2, "torrentDate": True})
-            f.seek(0)
-            f.write(json.dumps(cfg, indent=4, sort_keys=False))
-            f.truncate()
-        config = cfg
+    config = json.loads(FILE_J.read_text())
     logger.debug("Config is loaded.")
 except OSError as e:
     logger.error(e)
     # if file doesn't exist, we'll create it
-    with open(FILE_J, 'w') as f:
-        f.write(json.dumps(config, indent=4, sort_keys=False))
+    FILE_J.write_text(json.dumps(config, indent=4, sort_keys=False))
     # also write/rewrite ico file
-    with open(path_to(FILENAME + '.ico'), 'wb') as f:
-        f.write(base64.b64decode(ICON))
+    (BASEDIR / (FILENAME + '.ico')).write_bytes(base64.b64decode(ICON))
     logger.debug("Write files.")
 
 
-class kinozal:
+class Kinozal:
     name = 'Kinozal'
     url = 'http://kinozal.tv/'
     url_dl = url.replace("//", "//dl.")
@@ -170,7 +161,7 @@ class kinozal:
             self.pretty_error(what)
             return None
         # do async requests
-        if total > 50:
+        if total > PAGES:
             qrs = [PATTERNS[1] % (query, x) for x in rng(total)]
             with ThreadPoolExecutor(len(qrs)) as executor:
                 executor.map(self.searching, qrs, timeout=30)
@@ -195,10 +186,9 @@ class kinozal:
             path = 'magnet:?xt=urn:btih:' + response.decode()[18:58]
         else:
             # Create a torrent file
-            file, path = tempfile.mkstemp('.torrent')
-            with os.fdopen(file, "wb") as fd:
-                # Write it to a file
+            with NamedTemporaryFile(suffix='.torrent', delete=False) as fd:
                 fd.write(response)
+                path = fd.name
 
         # return magnet link / file path
         logger.debug(path + " " + url)
@@ -214,7 +204,8 @@ class kinozal:
         logger.debug(f"Login. Data before: {form_data}")
         # so we first encode vals to cp1251 then do default decode whole string
         data_encoded = urlencode(
-            {k: v.encode('cp1251') for k, v in form_data.items()}).encode()
+            {k: v.encode('cp1251') for k, v in form_data.items()}
+        ).encode()
         logger.debug(f"Login. Data after: {data_encoded}")
 
         self._catch_error_request(self.url_login, data_encoded)
@@ -310,6 +301,9 @@ class kinozal:
 
         self.error = None
 
+
+# pep8
+kinozal = Kinozal
 
 if __name__ == "__main__":
     engine = kinozal()

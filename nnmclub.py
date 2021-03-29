@@ -1,4 +1,4 @@
-# VERSION: 2.6
+# VERSION: 2.7
 # AUTHORS: imDMG [imdmgg@gmail.com]
 
 # NoNaMe-Club search engine plugin for qBittorrent
@@ -6,14 +6,14 @@
 import base64
 import json
 import logging
-import os
 import re
 import socket
-import tempfile
 import time
 from concurrent.futures import ThreadPoolExecutor
 from html import unescape
 from http.cookiejar import Cookie, MozillaCookieJar
+from pathlib import Path
+from tempfile import NamedTemporaryFile
 from urllib.error import URLError, HTTPError
 from urllib.parse import urlencode, unquote
 from urllib.request import build_opener, HTTPCookieProcessor, ProxyHandler
@@ -35,24 +35,26 @@ config = {
     "ua": "Mozilla/5.0 (X11; Linux i686; rv:38.0) Gecko/20100101 Firefox/38.0 "
 }
 
+FILE = Path(__file__)
+BASEDIR = FILE.parent.absolute()
 
-def path_to(*file):
-    return os.path.abspath(os.path.join(os.path.dirname(__file__), *file))
+FILENAME = FILE.name[:-3]
+FILE_J, FILE_C = [BASEDIR / (FILENAME + fl) for fl in ['.json', '.cookie']]
+
+PAGES = 50
 
 
 def rng(t):
-    return range(50, -(-t // 50) * 50, 50)
+    return range(PAGES, -(-t // PAGES) * PAGES, PAGES)
 
 
 RE_TORRENTS = re.compile(
     r'topictitle"\shref="(.+?)"><b>(.+?)</b>.+?href="(d.+?)".+?<u>(\d+?)</u>.+?'
-    r'<b>(\d+)</b>.+?<b>(\d+)</b>.+?<u>(\d+)</u>', re.S)
+    r'<b>(\d+)</b>.+?<b>(\d+)</b>.+?<u>(\d+)</u>', re.S
+)
 RE_RESULTS = re.compile(r'TP_VER">(?:Результатов\sпоиска:\s(\d{1,3}))?\s', re.S)
 RE_CODE = re.compile(r'name="code"\svalue="(.+?)"', re.S)
 PATTERNS = ('%stracker.php?nm=%s&%s', "%s&start=%s")
-
-FILENAME = os.path.basename(__file__)[:-3]
-FILE_J, FILE_C = [path_to(FILENAME + fe) for fe in ['.json', '.cookie']]
 
 # base64 encoded image
 ICON = ("AAABAAEAEBAAAAEAIABoBAAAFgAAACgAAAAQAAAAIAAAAAEAIAAAAAAAAAAAAAAAAAAAAA"
@@ -82,33 +84,24 @@ ICON = ("AAABAAEAEBAAAAEAIABoBAAAFgAAACgAAAAQAAAAIAAAAAEAIAAAAAAAAAAAAAAAAAAAAA"
 logging.basicConfig(
     format="%(asctime)s %(name)-12s %(levelname)-8s %(message)s",
     datefmt="%m-%d %H:%M",
-    level=logging.DEBUG)
+    level=logging.DEBUG
+)
 
 logger = logging.getLogger(__name__)
 
 try:
-    # try to load user data from file
-    with open(FILE_J, 'r+') as f:
-        cfg = json.load(f)
-        if "version" not in cfg.keys():
-            cfg.update({"version": 2, "torrentDate": True})
-            f.seek(0)
-            f.write(json.dumps(cfg, indent=4, sort_keys=False))
-            f.truncate()
-        config = cfg
+    config = json.loads(FILE_J.read_text())
     logger.debug("Config is loaded.")
 except OSError as e:
     logger.error(e)
     # if file doesn't exist, we'll create it
-    with open(FILE_J, 'w') as f:
-        f.write(json.dumps(config, indent=4, sort_keys=False))
+    FILE_J.write_text(json.dumps(config, indent=4, sort_keys=False))
     # also write/rewrite ico file
-    with open(path_to(FILENAME + '.ico'), 'wb') as f:
-        f.write(base64.b64decode(ICON))
+    (BASEDIR / (FILENAME + '.ico')).write_bytes(base64.b64decode(ICON))
     logger.debug("Write files.")
 
 
-class nnmclub:
+class NNMClub:
     name = 'NoNaMe-Club'
     url = 'https://nnmclub.to/forum/'
     url_dl = 'https://nnm-club.ws/'
@@ -169,7 +162,7 @@ class nnmclub:
             self.pretty_error(what)
             return None
         # do async requests
-        if total > 50:
+        if total > PAGES:
             qrs = [PATTERNS[1] % (query, x) for x in rng(total)]
             with ThreadPoolExecutor(len(qrs)) as executor:
                 executor.map(self.searching, qrs, timeout=30)
@@ -185,14 +178,12 @@ class nnmclub:
             return None
 
         # Create a torrent file
-        file, path = tempfile.mkstemp('.torrent')
-        with os.fdopen(file, "wb") as fd:
-            # Write it to a file
+        with NamedTemporaryFile(suffix='.torrent', delete=False) as fd:
             fd.write(response)
 
-        # return file path
-        logger.debug(path + " " + url)
-        print(path + " " + url)
+            # return file path
+            logger.debug(fd.name + " " + url)
+            print(fd.name + " " + url)
 
     def login(self, mcj):
         if self.error:
@@ -214,7 +205,8 @@ class nnmclub:
                      "login": "Вход"}
         # so we first encode vals to cp1251 then do default decode whole string
         data_encoded = urlencode(
-            {k: v.encode('cp1251') for k, v in form_data.items()}).encode()
+            {k: v.encode('cp1251') for k, v in form_data.items()}
+        ).encode()
 
         self._catch_error_request(self.url_login, data_encoded)
         if self.error:
@@ -302,6 +294,9 @@ class nnmclub:
 
         self.error = None
 
+
+# pep8
+nnmclub = NNMClub
 
 if __name__ == "__main__":
     engine = nnmclub()
