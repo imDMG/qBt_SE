@@ -1,4 +1,4 @@
-# VERSION: 2.7
+# VERSION: 2.8
 # AUTHORS: imDMG [imdmgg@gmail.com]
 
 # NoNaMe-Club search engine plugin for qBittorrent
@@ -8,6 +8,7 @@ import json
 import logging
 import re
 import socket
+import sys
 import time
 from concurrent.futures import ThreadPoolExecutor
 from html import unescape
@@ -18,11 +19,14 @@ from urllib.error import URLError, HTTPError
 from urllib.parse import urlencode, unquote
 from urllib.request import build_opener, HTTPCookieProcessor, ProxyHandler
 
-from novaprinter import prettyPrinter
+try:
+    from novaprinter import prettyPrinter
+except ImportError:
+    sys.path.insert(0, str(Path(__file__).parent.parent.absolute()))
+    from novaprinter import prettyPrinter
 
 # default config
 config = {
-    "version": 2,
     "torrentDate": True,
     "username": "USERNAME",
     "password": "PASSWORD",
@@ -299,5 +303,9 @@ class NNMClub:
 nnmclub = NNMClub
 
 if __name__ == "__main__":
+    if BASEDIR.parent.joinpath('settings_gui.py').exists():
+        from settings_gui import EngineSettingsGUI
+
+        EngineSettingsGUI(FILENAME)
     engine = nnmclub()
     engine.search('doctor')

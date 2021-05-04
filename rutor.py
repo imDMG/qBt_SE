@@ -1,4 +1,4 @@
-# VERSION: 1.2
+# VERSION: 1.3
 # AUTHORS: imDMG [imdmgg@gmail.com]
 
 # Rutor.org search engine plugin for qBittorrent
@@ -8,6 +8,7 @@ import json
 import logging
 import re
 import socket
+import sys
 import time
 from concurrent.futures.thread import ThreadPoolExecutor
 from html import unescape
@@ -17,7 +18,11 @@ from urllib.error import URLError, HTTPError
 from urllib.parse import unquote
 from urllib.request import build_opener, ProxyHandler
 
-from novaprinter import prettyPrinter
+try:
+    from novaprinter import prettyPrinter
+except ImportError:
+    sys.path.insert(0, str(Path(__file__).parent.parent.absolute()))
+    from novaprinter import prettyPrinter
 
 # default config
 config = {
@@ -240,5 +245,9 @@ class Rutor:
 rutor = Rutor
 
 if __name__ == "__main__":
+    if BASEDIR.parent.joinpath('settings_gui.py').exists():
+        from settings_gui import EngineSettingsGUI
+
+        EngineSettingsGUI(FILENAME)
     engine = rutor()
     engine.search('doctor')

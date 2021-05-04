@@ -1,4 +1,4 @@
-# VERSION: 1.4
+# VERSION: 1.5
 # AUTHORS: imDMG [imdmgg@gmail.com]
 
 # rutracker.org search engine plugin for qBittorrent
@@ -8,6 +8,7 @@ import json
 import logging
 import re
 import socket
+import sys
 import time
 from concurrent.futures import ThreadPoolExecutor
 from html import unescape
@@ -18,7 +19,11 @@ from urllib.error import URLError, HTTPError
 from urllib.parse import urlencode, unquote
 from urllib.request import build_opener, HTTPCookieProcessor, ProxyHandler
 
-from novaprinter import prettyPrinter
+try:
+    from novaprinter import prettyPrinter
+except ImportError:
+    sys.path.insert(0, str(Path(__file__).parent.parent.absolute()))
+    from novaprinter import prettyPrinter
 
 # default config
 config = {
@@ -286,5 +291,9 @@ class Rutracker:
 rutracker = Rutracker
 
 if __name__ == "__main__":
+    if BASEDIR.parent.joinpath('settings_gui.py').exists():
+        from settings_gui import EngineSettingsGUI
+
+        EngineSettingsGUI(FILENAME)
     engine = rutracker()
     engine.search('doctor')

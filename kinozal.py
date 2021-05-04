@@ -1,4 +1,4 @@
-# VERSION: 2.5
+# VERSION: 2.6
 # AUTHORS: imDMG [imdmgg@gmail.com]
 
 # Kinozal.tv search engine plugin for qBittorrent
@@ -9,6 +9,7 @@ import json
 import logging
 import re
 import socket
+import sys
 import time
 from concurrent.futures.thread import ThreadPoolExecutor
 from functools import partial
@@ -20,7 +21,11 @@ from urllib.error import URLError, HTTPError
 from urllib.parse import urlencode, unquote
 from urllib.request import build_opener, HTTPCookieProcessor, ProxyHandler
 
-from novaprinter import prettyPrinter
+try:
+    from novaprinter import prettyPrinter
+except ImportError:
+    sys.path.insert(0, str(Path(__file__).parent.parent.absolute()))
+    from novaprinter import prettyPrinter
 
 # default config
 config = {
@@ -172,8 +177,8 @@ class Kinozal:
     def download_torrent(self, url: str):
         # choose download method
         if config.get("magnet"):
-            url = f"{self.url}get_srv_details.php?" \
-                  f"action=2&id={url.split('=')[1]}"
+            url = "%sget_srv_details.php?action=2&id=%s" % (self.url,
+                                                            url.split('=')[1])
 
         response = self._catch_error_request(url)
         if self.error:
@@ -306,5 +311,9 @@ class Kinozal:
 kinozal = Kinozal
 
 if __name__ == "__main__":
+    if BASEDIR.parent.joinpath('settings_gui.py').exists():
+        from settings_gui import EngineSettingsGUI
+
+        EngineSettingsGUI(FILENAME)
     engine = kinozal()
     engine.search('doctor')
