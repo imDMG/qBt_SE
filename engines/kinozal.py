@@ -1,4 +1,4 @@
-# VERSION: 2.6
+# VERSION: 2.7
 # AUTHORS: imDMG [imdmgg@gmail.com]
 
 # Kinozal.tv search engine plugin for qBittorrent
@@ -8,15 +8,16 @@ import gzip
 import json
 import logging
 import re
-import socket
 import sys
 import time
 from concurrent.futures.thread import ThreadPoolExecutor
+from dataclasses import dataclass, field
 from functools import partial
 from html import unescape
 from http.cookiejar import MozillaCookieJar
 from pathlib import Path
 from tempfile import NamedTemporaryFile
+from typing import Union, Optional
 from urllib.error import URLError, HTTPError
 from urllib.parse import urlencode, unquote
 from urllib.request import build_opener, HTTPCookieProcessor, ProxyHandler
@@ -27,39 +28,29 @@ except ImportError:
     sys.path.insert(0, str(Path(__file__).parent.parent.absolute()))
     from novaprinter import prettyPrinter
 
-# default config
-config = {
-    "torrentDate": True,
-    "username": "USERNAME",
-    "password": "PASSWORD",
-    "proxy": False,
-    "proxies": {
-        "http": "",
-        "https": ""
-    },
-    "magnet": True,
-    "ua": "Mozilla/5.0 (X11; Linux i686; rv:38.0) Gecko/20100101 Firefox/38.0 "
-}
+# setup logging
+logging.basicConfig(
+    format="%(asctime)s %(name)-12s %(levelname)-8s %(message)s",
+    datefmt="%m-%d %H:%M",
+    level=logging.DEBUG
+)
+
+logger = logging.getLogger(__name__)
 
 FILE = Path(__file__)
 BASEDIR = FILE.parent.absolute()
 
 FILENAME = FILE.name[:-3]
-FILE_J, FILE_C = [BASEDIR / (FILENAME + fl) for fl in ['.json', '.cookie']]
+FILE_J, FILE_C = [BASEDIR / (FILENAME + fl) for fl in (".json", ".cookie")]
 
 PAGES = 50
-
-
-def rng(t):
-    return range(1, -(-t // PAGES))
-
 
 RE_TORRENTS = re.compile(
     r'nam"><a\s+?href="/(.+?)"\s+?class="r\d">(.+?)</a>.+?s\'>.+?s\'>(.+?)<.+?'
     r'sl_s\'>(\d+?)<.+?sl_p\'>(\d+?)<.+?s\'>(.+?)</td>', re.S
 )
-RE_RESULTS = re.compile(r'</span>Найдено\s+?(\d+?)\s+?раздач', re.S)
-PATTERNS = ('%sbrowse.php?s=%s&c=%s', "%s&page=%s")
+RE_RESULTS = re.compile(r"</span>Найдено\s+?(\d+?)\s+?раздач", re.S)
+PATTERNS = ("%sbrowse.php?s=%s&c=%s", "%s&page=%s")
 
 # base64 encoded image
 ICON = ("AAABAAEAEBAAAAEAIABoBAAAFgAAACgAAAAQAAAAIAAAAAEAIAAAAAAAQAQAAAAAAAAAAA"
@@ -85,75 +76,104 @@ ICON = ("AAABAAEAEBAAAAEAIABoBAAAFgAAACgAAAAQAAAAIAAAAAEAIAAAAAAAQAQAAAAAAAAAAA"
         "gEc7/4BHO/+ARztMAAAAAIBHO0yARzv/gEc7/4BHO0wAAAAACCEAAAABAAAAAQAAAAEAAI"
         "ADAAAAAQAAAAEAAAABAAAAAQAAAAEAAAABAACAAwAAAAEAAAABAAAAAQAACCEAAA== ")
 
-# setup logging
-logging.basicConfig(
-    format="%(asctime)s %(name)-12s %(levelname)-8s %(message)s",
-    datefmt="%m-%d %H:%M",
-    level=logging.DEBUG
-)
 
-logger = logging.getLogger(__name__)
+def rng(t: int) -> range:
+    return range(1, -(-t // PAGES))
 
-try:
-    config = json.loads(FILE_J.read_text())
-    logger.debug("Config is loaded.")
-except OSError as e:
-    logger.error(e)
-    # if file doesn't exist, we'll create it
-    FILE_J.write_text(json.dumps(config, indent=4, sort_keys=False))
-    # also write/rewrite ico file
-    (BASEDIR / (FILENAME + '.ico')).write_bytes(base64.b64decode(ICON))
-    logger.debug("Write files.")
+
+@dataclass
+class Config:
+    username: str = "USERNAME"
+    password: str = "PASSWORD"
+    torrent_date: bool = True
+    magnet: bool = False
+    proxy: bool = False
+    # dynamic_proxy: bool = True
+    proxies: dict = field(default_factory=lambda: {"http": "", "https": ""})
+    ua: str = ("Mozilla/5.0 (X11; Linux i686; rv:38.0) Gecko/20100101 "
+               "Firefox/38.0 ")
+
+    def __post_init__(self):
+        try:
+            if not self._validate_json(json.loads(FILE_J.read_text())):
+                raise ValueError("Incorrect json scheme.")
+        except Exception as e:
+            logger.error(e)
+            FILE_J.write_text(self.to_str())
+            (BASEDIR / f"{FILENAME}.ico").write_bytes(base64.b64decode(ICON))
+
+    def to_str(self) -> str:
+        return json.dumps(self.to_dict(), indent=4, sort_keys=False)
+
+    def to_dict(self) -> dict:
+        return {self._to_camel(k): v for k, v in self.__dict__.items()}
+
+    def _validate_json(self, obj: dict) -> bool:
+        is_valid = True
+        for k, v in self.__dict__.items():
+            _val = obj.get(self._to_camel(k))
+            if type(_val) is not type(v):
+                is_valid = False
+                continue
+            setattr(self, k, _val)
+        return is_valid
+
+    @staticmethod
+    def _to_camel(s: str) -> str:
+        return "".join(x.title() if i else x
+                       for i, x in enumerate(s.split("_")))
+
+
+config = Config()
 
 
 class Kinozal:
-    name = 'Kinozal'
-    url = 'http://kinozal.tv/'
+    name = "Kinozal"
+    url = "http://kinozal.tv/"
     url_dl = url.replace("//", "//dl.")
-    url_login = url + 'takelogin.php'
-    supported_categories = {'all': '0',
-                            'movies': '1002',
-                            'tv': '1001',
-                            'music': '1004',
-                            'games': '23',
-                            'anime': '20',
-                            'software': '32'}
+    url_login = url + "takelogin.php"
+    supported_categories = {"all": "0",
+                            "movies": "1002",
+                            "tv": "1001",
+                            "music": "1004",
+                            "games": "23",
+                            "anime": "20",
+                            "software": "32"}
+
+    # error message
+    error: Optional[str] = None
+    # cookies
+    mcj = MozillaCookieJar()
+    # establish connection
+    session = build_opener(HTTPCookieProcessor(mcj))
 
     def __init__(self):
-        # error message
-        self.error = None
-
-        # establish connection
-        self.session = build_opener()
-
         # add proxy handler if needed
-        if config['proxy']:
-            if any(config['proxies'].values()):
-                self.session.add_handler(ProxyHandler(config['proxies']))
+        if config.proxy:
+            if any(config.proxies.values()):
+                self.session.add_handler(ProxyHandler(config.proxies))
                 logger.debug("Proxy is set!")
             else:
                 self.error = "Proxy enabled, but not set!"
 
         # change user-agent
-        self.session.addheaders = [('User-Agent', config['ua'])]
+        self.session.addheaders = [("User-Agent", config.ua)]
 
         # load local cookies
-        mcj = MozillaCookieJar()
         try:
-            mcj.load(FILE_C, ignore_discard=True)
-            if 'uid' in [cookie.name for cookie in mcj]:
+            self.mcj.load(FILE_C, ignore_discard=True)
+            if "uid" in [cookie.name for cookie in self.mcj]:
                 # if cookie.expires < int(time.time())
                 logger.info("Local cookies is loaded")
-                self.session.add_handler(HTTPCookieProcessor(mcj))
             else:
                 logger.info("Local cookies expired or bad")
-                logger.debug(f"That we have: {[cookie for cookie in mcj]}")
-                mcj.clear()
-                self.login(mcj)
+                logger.debug(f"That we have: {[cookie for cookie in self.mcj]}")
+                self.mcj.clear()
+                self.login()
         except FileNotFoundError:
-            self.login(mcj)
+            self.login()
 
-    def search(self, what, cat='all'):
+    def search(self, what: str, cat: str = "all") -> None:
         if self.error:
             self.pretty_error(what)
             return None
@@ -174,24 +194,24 @@ class Kinozal:
         logger.debug(f"--- {time.time() - t0} seconds ---")
         logger.info(f"Found torrents: {total}")
 
-    def download_torrent(self, url: str):
+    def download_torrent(self, url: str) -> None:
         # choose download method
-        if config.get("magnet"):
+        if config.magnet:
             url = "%sget_srv_details.php?action=2&id=%s" % (self.url,
-                                                            url.split('=')[1])
+                                                            url.split("=")[1])
 
-        response = self._catch_error_request(url)
+        response = self._request(url)
         if self.error:
             self.pretty_error(url)
             return None
 
-        if config.get("magnet"):
+        if config.magnet:
             if response.startswith(b"\x1f\x8b\x08"):
                 response = gzip.decompress(response)
-            path = 'magnet:?xt=urn:btih:' + response.decode()[18:58]
+            path = "magnet:?xt=urn:btih:" + response.decode()[18:58]
         else:
             # Create a torrent file
-            with NamedTemporaryFile(suffix='.torrent', delete=False) as fd:
+            with NamedTemporaryFile(suffix=".torrent", delete=False) as fd:
                 fd.write(response)
                 path = fd.name
 
@@ -199,55 +219,62 @@ class Kinozal:
         logger.debug(path + " " + url)
         print(path + " " + url)
 
-    def login(self, mcj):
+    def login(self) -> None:
         if self.error:
             return None
-        self.session.add_handler(HTTPCookieProcessor(mcj))
 
-        form_data = {"username": config['username'],
-                     "password": config['password']}
+        form_data = {"username": config.username, "password": config.password}
         logger.debug(f"Login. Data before: {form_data}")
-        # so we first encode vals to cp1251 then do default decode whole string
-        data_encoded = urlencode(
-            {k: v.encode('cp1251') for k, v in form_data.items()}
-        ).encode()
+        # encoding to cp1251 then do default decode whole string
+        data_encoded = urlencode(form_data, encoding="cp1251").encode()
         logger.debug(f"Login. Data after: {data_encoded}")
 
-        self._catch_error_request(self.url_login, data_encoded)
+        self._request(self.url_login, data_encoded)
         if self.error:
             return None
-        logger.debug(f"That we have: {[cookie for cookie in mcj]}")
-        if 'uid' in [cookie.name for cookie in mcj]:
-            mcj.save(FILE_C, ignore_discard=True, ignore_expires=True)
-            logger.info('We successfully authorized')
+        logger.debug(f"That we have: {[cookie for cookie in self.mcj]}")
+        if "uid" in [cookie.name for cookie in self.mcj]:
+            self.mcj.save(FILE_C, ignore_discard=True, ignore_expires=True)
+            logger.info("We successfully authorized")
         else:
             self.error = "We not authorized, please check your credentials!"
             logger.warning(self.error)
 
-    def searching(self, query, first=False):
-        response = self._catch_error_request(query)
-        if not response:
+    def searching(self, query: str, first: bool = False) -> Union[None, int]:
+        response = self._request(query)
+        if self.error:
             return None
         if response.startswith(b"\x1f\x8b\x08"):
             response = gzip.decompress(response)
-        page, torrents_found = response.decode('cp1251'), -1
+        page, torrents_found = response.decode("cp1251"), -1
         if first:
+            # check login status
+            if "Гость! ( Зарегистрируйтесь )" in page:
+                logger.debug("Looks like we lost session id, lets login")
+                self.mcj.clear()
+                self.login()
+                if self.error:
+                    return None
             # firstly we check if there is a result
-            torrents_found = int(RE_RESULTS.search(page)[1])
+            result = RE_RESULTS.search(page)
+            if not result:
+                self.error = "Unexpected page content"
+                return None
+            torrents_found = int(result[1])
             if not torrents_found:
                 return 0
         self.draw(page)
 
         return torrents_found
 
-    def draw(self, html: str):
+    def draw(self, html: str) -> None:
         torrents = RE_TORRENTS.findall(html)
         _part = partial(time.strftime, "%y.%m.%d")
         # yeah this is yesterday
         yesterday = _part(time.localtime(time.time() - 86400))
         for tor in torrents:
             torrent_date = ""
-            if config['torrentDate']:
+            if config.torrent_date:
                 ct = tor[5].split()[0]
                 if "сегодня" in ct:
                     torrent_date = _part()
@@ -255,10 +282,10 @@ class Kinozal:
                     torrent_date = yesterday
                 else:
                     torrent_date = _part(time.strptime(ct, "%d.%m.%Y"))
-                torrent_date = f'[{torrent_date}] '
+                torrent_date = f"[{torrent_date}] "
 
             # replace size units
-            table = {'Т': 'T', 'Г': 'G', 'М': 'M', 'К': 'K', 'Б': 'B'}
+            table = {"Т": "T", "Г": "G", "М": "M", "К": "K", "Б": "B"}
 
             prettyPrinter({
                 "engine_url": self.url,
@@ -271,31 +298,31 @@ class Kinozal:
             })
         del torrents
 
-    def _catch_error_request(self, url=None, data=None, repeated=False):
-        url = url or self.url
-
+    def _request(
+        self, url: str, data: Optional[bytes] = None, repeated: bool = False
+    ) -> Union[bytes, None]:
         try:
             with self.session.open(url, data, 5) as r:
                 # checking that tracker isn't blocked
-                if r.url.startswith((self.url, self.url_dl)):
+                if r.geturl().startswith((self.url, self.url_dl)):
                     return r.read()
-                raise URLError(f"{self.url} is blocked. Try another proxy.")
-        except (socket.error, socket.timeout) as err:
-            if not repeated:
-                return self._catch_error_request(url, data, True)
-            logger.error(err)
-            self.error = f"{self.url} is not response! Maybe it is blocked."
-            if "no host given" in err.args:
-                self.error = "Proxy is bad, try another!"
+                self.error = f"{url} is blocked. Try another proxy."
         except (URLError, HTTPError) as err:
             logger.error(err.reason)
-            self.error = err.reason
-            if hasattr(err, 'code'):
+            error = str(err.reason)
+            if "timed out" in error and not repeated:
+                logger.debug("Repeating request...")
+                return self._request(url, data, True)
+            if "no host given" in error:
+                self.error = "Proxy is bad, try another!"
+            elif hasattr(err, "code"):
                 self.error = f"Request to {url} failed with status: {err.code}"
+            else:
+                self.error = f"{url} is not response! Maybe it is blocked."
 
         return None
 
-    def pretty_error(self, what):
+    def pretty_error(self, what: str) -> None:
         prettyPrinter({"engine_url": self.url,
                        "desc_link": "https://github.com/imDMG/qBt_SE",
                        "name": f"[{unquote(what)}][Error]: {self.error}",
@@ -311,9 +338,9 @@ class Kinozal:
 kinozal = Kinozal
 
 if __name__ == "__main__":
-    if BASEDIR.parent.joinpath('settings_gui.py').exists():
+    if BASEDIR.parent.joinpath("settings_gui.py").exists():
         from settings_gui import EngineSettingsGUI
 
         EngineSettingsGUI(FILENAME)
     engine = kinozal()
-    engine.search('doctor')
+    engine.search("doctor")
