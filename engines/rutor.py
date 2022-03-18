@@ -1,4 +1,4 @@
-# VERSION: 1.3
+# VERSION: 1.4
 # AUTHORS: imDMG [imdmgg@gmail.com]
 
 # Rutor.org search engine plugin for qBittorrent
@@ -7,13 +7,14 @@ import base64
 import json
 import logging
 import re
-import socket
 import sys
 import time
 from concurrent.futures.thread import ThreadPoolExecutor
+from dataclasses import dataclass, field
 from html import unescape
 from pathlib import Path
 from tempfile import NamedTemporaryFile
+from typing import Optional, Union
 from urllib.error import URLError, HTTPError
 from urllib.parse import unquote
 from urllib.request import build_opener, ProxyHandler
@@ -24,29 +25,16 @@ except ImportError:
     sys.path.insert(0, str(Path(__file__).parent.parent.absolute()))
     from novaprinter import prettyPrinter
 
-# default config
-config = {
-    "torrentDate": True,
-    "username": "USERNAME",
-    "password": "PASSWORD",
-    "proxy": False,
-    "proxies": {
-        "http": "",
-        "https": ""
-    },
-    "ua": "Mozilla/5.0 (X11; Linux i686; rv:38.0) Gecko/20100101 Firefox/38.0 "
-}
-
 FILE = Path(__file__)
 BASEDIR = FILE.parent.absolute()
 
 FILENAME = FILE.name[:-3]
-FILE_J, FILE_C = [BASEDIR / (FILENAME + fl) for fl in ['.json', '.cookie']]
+FILE_J, FILE_C = [BASEDIR / (FILENAME + fl) for fl in [".json", ".cookie"]]
 
 PAGES = 100
 
 
-def rng(t):
+def rng(t: int) -> range:
     return range(1, -(-t // PAGES))
 
 
@@ -54,8 +42,8 @@ RE_TORRENTS = re.compile(
     r'(?:gai|tum)"><td>(.+?)</td.+?href="/(torrent/(\d+).+?)">(.+?)</a.+?right"'
     r'>([.\d]+&nbsp;\w+)</td.+?alt="S"\s/>(.+?)</s.+?red">(.+?)</s', re.S
 )
-RE_RESULTS = re.compile(r'</b>\sРезультатов\sпоиска\s(\d{1,4})\s', re.S)
-PATTERNS = ('%ssearch/%i/%i/000/0/%s',)
+RE_RESULTS = re.compile(r"</b>\sРезультатов\sпоиска\s(\d{1,4})\s", re.S)
+PATTERNS = ("%ssearch/%i/%i/000/0/%s",)
 
 # base64 encoded image
 ICON = ("AAABAAEAEBAAAAEAGABoAwAAFgAAACgAAAAQAAAAIAAAAAEAGAAAAAAAAAAAAAAAAAAAAA"
@@ -86,31 +74,71 @@ logging.basicConfig(
 
 logger = logging.getLogger(__name__)
 
-try:
-    config = json.loads(FILE_J.read_text())
-    logger.debug("Config is loaded.")
-except OSError as e:
-    logger.error(e)
-    # if file doesn't exist, we'll create it
-    FILE_J.write_text(json.dumps(config, indent=4, sort_keys=False))
-    # also write/rewrite ico file
-    (BASEDIR / (FILENAME + '.ico')).write_bytes(base64.b64decode(ICON))
-    logger.debug("Write files.")
+
+@dataclass
+class Config:
+    # username: str = "USERNAME"
+    # password: str = "PASSWORD"
+    torrent_date: bool = True
+    # magnet: bool = False
+    proxy: bool = False
+    # dynamic_proxy: bool = True
+    proxies: dict = field(default_factory=lambda: {"http": "", "https": ""})
+    ua: str = ("Mozilla/5.0 (X11; Linux i686; rv:38.0) Gecko/20100101 "
+               "Firefox/38.0 ")
+
+    def __post_init__(self):
+        try:
+            if not self._validate_json(json.loads(FILE_J.read_text())):
+                raise ValueError("Incorrect json scheme.")
+        except Exception as e:
+            logger.error(e)
+            FILE_J.write_text(self.to_str())
+            (BASEDIR / f"{FILENAME}.ico").write_bytes(base64.b64decode(ICON))
+
+    def to_str(self) -> str:
+        return json.dumps(self.to_dict(), indent=4, sort_keys=False)
+
+    def to_dict(self) -> dict:
+        return {self._to_camel(k): v for k, v in self.__dict__.items()}
+
+    def _validate_json(self, obj: dict) -> bool:
+        is_valid = True
+        for k, v in self.__dict__.items():
+            _val = obj.get(self._to_camel(k))
+            if type(_val) is not type(v):
+                is_valid = False
+                continue
+            if type(_val) is dict:
+                for dk, dv in v.items():
+                    if type(_val.get(dk)) is not type(dv):
+                        _val[dk] = dv
+                        is_valid = False
+            setattr(self, k, _val)
+        return is_valid
+
+    @staticmethod
+    def _to_camel(s: str) -> str:
+        return "".join(x.title() if i else x
+                       for i, x in enumerate(s.split("_")))
+
+
+config = Config()
 
 
 class Rutor:
-    name = 'Rutor'
-    url = 'http://rutor.info/'
+    name = "Rutor"
+    url = "http://rutor.info/"
     url_dl = url.replace("//", "//d.") + "download/"
-    supported_categories = {'all': 0,
-                            'movies': 1,
-                            'tv': 6,
-                            'music': 2,
-                            'games': 8,
-                            'anime': 10,
-                            'software': 9,
-                            'pictures': 3,
-                            'books': 11}
+    supported_categories = {"all": 0,
+                            "movies": 1,
+                            "tv": 6,
+                            "music": 2,
+                            "games": 8,
+                            "anime": 10,
+                            "software": 9,
+                            "pictures": 3,
+                            "books": 11}
 
     def __init__(self):
         # error message
@@ -120,17 +148,17 @@ class Rutor:
         self.session = build_opener()
 
         # add proxy handler if needed
-        if config['proxy']:
-            if any(config['proxies'].values()):
-                self.session.add_handler(ProxyHandler(config['proxies']))
+        if config.proxy:
+            if any(config.proxies.values()):
+                self.session.add_handler(ProxyHandler(config.proxies))
                 logger.debug("Proxy is set!")
             else:
                 self.error = "Proxy enabled, but not set!"
 
         # change user-agent
-        self.session.addheaders = [('User-Agent', config['ua'])]
+        self.session.addheaders = [("User-Agent", config.ua)]
 
-    def search(self, what, cat='all'):
+    def search(self, what: str, cat: str = "all") -> None:
         if self.error:
             self.pretty_error(what)
             return None
@@ -144,7 +172,7 @@ class Rutor:
             return None
         # do async requests
         if total > PAGES:
-            query = query.replace('h/0', 'h/%i')
+            query = query.replace("h/0", "h/%i")
             qrs = [query % x for x in rng(total)]
             with ThreadPoolExecutor(len(qrs)) as executor:
                 executor.map(self.searching, qrs, timeout=30)
@@ -152,47 +180,50 @@ class Rutor:
         logger.debug(f"--- {time.time() - t0} seconds ---")
         logger.info(f"Found torrents: {total}")
 
-    def download_torrent(self, url: str):
+    def download_torrent(self, url: str) -> None:
         # Download url
-        response = self._catch_error_request(url)
+        response = self._request(url)
         if self.error:
             self.pretty_error(url)
             return None
 
         # Create a torrent file
-        with NamedTemporaryFile(suffix='.torrent', delete=False) as fd:
+        with NamedTemporaryFile(suffix=".torrent", delete=False) as fd:
             fd.write(response)
 
             # return file path
             logger.debug(fd.name + " " + url)
             print(fd.name + " " + url)
 
-    def searching(self, query, first=False):
-        response = self._catch_error_request(query)
-        if not response:
+    def searching(self, query: str, first: bool = False) -> Union[None, int]:
+        response = self._request(query)
+        if self.error:
             return None
         page, torrents_found = response.decode(), -1
         if first:
             # firstly we check if there is a result
-            torrents_found = int(RE_RESULTS.search(page)[1])
+            result = RE_RESULTS.search(page)
+            if not result:
+                self.error = "Unexpected page content"
+                return None
+            torrents_found = int(result[1])
             if not torrents_found:
                 return 0
         self.draw(page)
 
         return torrents_found
 
-    def draw(self, html: str):
-        torrents = RE_TORRENTS.findall(html)
-        for tor in torrents:
+    def draw(self, html: str) -> None:
+        for tor in RE_TORRENTS.findall(html):
             torrent_date = ""
-            if config['torrentDate']:
+            if config.torrent_date:
                 # replace names month
-                months = ('Янв', 'Фев', 'Мар', 'Апр', 'Май', 'Июн',
-                          'Июл', 'Авг', 'Сен', 'Окт', 'Ноя', 'Дек')
+                months = ("Янв", "Фев", "Мар", "Апр", "Май", "Июн",
+                          "Июл", "Авг", "Сен", "Окт", "Ноя", "Дек")
                 ct = [unescape(tor[0].replace(m, f"{i:02d}"))
                       for i, m in enumerate(months, 1) if m in tor[0]][0]
                 ct = time.strftime("%y.%m.%d", time.strptime(ct, "%d %m %y"))
-                torrent_date = f'[{ct}] '
+                torrent_date = f"[{ct}] "
 
             prettyPrinter({
                 "engine_url": self.url,
@@ -203,33 +234,32 @@ class Rutor:
                 "seeds": unescape(tor[5]),
                 "leech": unescape(tor[6])
             })
-        del torrents
 
-    def _catch_error_request(self, url=None, data=None, repeated=False):
-        url = url or self.url
-
+    def _request(
+            self, url: str, data: Optional[bytes] = None, repeated: bool = False
+    ) -> Union[bytes, None]:
         try:
             with self.session.open(url, data, 5) as r:
                 # checking that tracker isn't blocked
-                if r.url.startswith((self.url, self.url_dl)):
+                if r.geturl().startswith((self.url, self.url_dl)):
                     return r.read()
-                raise URLError(f"{self.url} is blocked. Try another proxy.")
-        except (socket.error, socket.timeout) as err:
-            if not repeated:
-                return self._catch_error_request(url, data, True)
-            logger.error(err)
-            self.error = f"{self.url} is not response! Maybe it is blocked."
-            if "no host given" in err.args:
-                self.error = "Proxy is bad, try another!"
+                self.error = f"{url} is blocked. Try another proxy."
         except (URLError, HTTPError) as err:
             logger.error(err.reason)
-            self.error = err.reason
-            if hasattr(err, 'code'):
+            error = str(err.reason)
+            if "timed out" in error and not repeated:
+                logger.debug("Repeating request...")
+                return self._request(url, data, True)
+            if "no host given" in error:
+                self.error = "Proxy is bad, try another!"
+            elif hasattr(err, "code"):
                 self.error = f"Request to {url} failed with status: {err.code}"
+            else:
+                self.error = f"{url} is not response! Maybe it is blocked."
 
         return None
 
-    def pretty_error(self, what):
+    def pretty_error(self, what: str) -> None:
         prettyPrinter({"engine_url": self.url,
                        "desc_link": "https://github.com/imDMG/qBt_SE",
                        "name": f"[{unquote(what)}][Error]: {self.error}",
@@ -245,9 +275,9 @@ class Rutor:
 rutor = Rutor
 
 if __name__ == "__main__":
-    # if BASEDIR.parent.joinpath('settings_gui.py').exists():
-    #     from settings_gui import EngineSettingsGUI
-    #
-    #     EngineSettingsGUI(FILENAME)
+    if BASEDIR.parent.joinpath("settings_gui.py").exists():
+        from settings_gui import EngineSettingsGUI
+
+        EngineSettingsGUI(FILENAME)
     engine = rutor()
-    engine.search('doctor')
+    engine.search("doctor")

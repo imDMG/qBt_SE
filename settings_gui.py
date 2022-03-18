@@ -37,12 +37,12 @@ class EngineSettingsGUI:
         ttk.Label(mainframe, text="Password:").grid(
             column=0, row=1, sticky=tk.W, rowspan=2)
 
-        ttk.Entry(mainframe, width=25, textvariable=self.username).grid(
-            column=1, row=0, sticky=tk.EW, padx=(0, 5)
-        )
-        ttk.Entry(mainframe, width=25, textvariable=self.password).grid(
-            column=1, row=1, rowspan=2, sticky=tk.EW, padx=(0, 5)
-        )
+        ttk.Entry(mainframe, width=25, textvariable=self.username, state=(
+                    ("!" if self.config.get("username") else "") + tk.DISABLED)
+                  ).grid(column=1, row=0, sticky=tk.EW, padx=(0, 5))
+        ttk.Entry(mainframe, width=25, textvariable=self.password, state=(
+                    ("!" if self.config.get("password") else "") + tk.DISABLED)
+                  ).grid(column=1, row=1, rowspan=2, sticky=tk.EW, padx=(0, 5))
 
         ttk.Checkbutton(
             mainframe, text="Date before torrent", variable=self.date,
@@ -50,7 +50,8 @@ class EngineSettingsGUI:
         ).grid(column=2, row=0, sticky=tk.W)
         ttk.Checkbutton(
             mainframe, text="Use magnet link", variable=self.magnet,
-            onvalue=True
+            onvalue=True, state=(
+                    ("!" if self.config.get("magnet") else "") + tk.DISABLED)
         ).grid(column=2, row=1, sticky=tk.W)
         ttk.Checkbutton(
             mainframe, text="Proxy", variable=self.proxy, onvalue=True,
@@ -83,17 +84,19 @@ class EngineSettingsGUI:
         self.https_entry.state([state])
 
     def close(self) -> None:
-        if not (self.username.get() or self.password.get()):
-            messagebox.showinfo("Error", "Some fields is empty!")
-            return None
+        if self.config.get("username") and self.config.get("password"):
+            if not (self.username.get() or self.password.get()):
+                messagebox.showinfo("Error", "Some fields is empty!")
+                return None
 
         if self.proxy.get() and not (self.http_entry.get()
                                      or self.https_entry.get()):
             messagebox.showinfo("Error", "Some fields is empty!")
             return None
 
-        self.config["username"] = self.username.get()
-        self.config["password"] = self.password.get()
+        if self.config.get("username") and self.config.get("password"):
+            self.config["username"] = self.username.get()
+            self.config["password"] = self.password.get()
         self.config["proxy"] = self.proxy.get()
         if self.config["proxy"]:
             self.config["proxies"] = {
@@ -101,7 +104,8 @@ class EngineSettingsGUI:
                 "https": self.https_entry.get()
             }
         self.config["torrentDate"] = self.date.get()
-        self.config["magnet"] = self.magnet.get()
+        if self.config.get("magnet"):
+            self.config["magnet"] = self.magnet.get()
         self.cfg_file.write_text(
             json.dumps(self.config, indent=4, sort_keys=False)
         )
@@ -109,5 +113,5 @@ class EngineSettingsGUI:
 
 
 if __name__ == "__main__":
-    settings = EngineSettingsGUI("kinozal")
+    settings = EngineSettingsGUI("engines/kinozal")
     print(settings.config)

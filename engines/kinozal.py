@@ -1,4 +1,4 @@
-# VERSION: 2.7
+# VERSION: 2.9
 # AUTHORS: imDMG [imdmgg@gmail.com]
 
 # Kinozal.tv search engine plugin for qBittorrent
@@ -115,6 +115,11 @@ class Config:
             if type(_val) is not type(v):
                 is_valid = False
                 continue
+            if type(_val) is dict:
+                for dk, dv in v.items():
+                    if type(_val.get(dk)) is not type(dv):
+                        _val[dk] = dv
+                        is_valid = False
             setattr(self, k, _val)
         return is_valid
 
@@ -225,7 +230,7 @@ class Kinozal:
 
         form_data = {"username": config.username, "password": config.password}
         logger.debug(f"Login. Data before: {form_data}")
-        # encoding to cp1251 then do default decode whole string
+        # encoding to cp1251 then do default encode whole string
         data_encoded = urlencode(form_data, encoding="cp1251").encode()
         logger.debug(f"Login. Data after: {data_encoded}")
 
@@ -268,11 +273,10 @@ class Kinozal:
         return torrents_found
 
     def draw(self, html: str) -> None:
-        torrents = RE_TORRENTS.findall(html)
         _part = partial(time.strftime, "%y.%m.%d")
         # yeah this is yesterday
         yesterday = _part(time.localtime(time.time() - 86400))
-        for tor in torrents:
+        for tor in RE_TORRENTS.findall(html):
             torrent_date = ""
             if config.torrent_date:
                 ct = tor[5].split()[0]
@@ -296,10 +300,9 @@ class Kinozal:
                 "seeds": tor[3],
                 "leech": tor[4]
             })
-        del torrents
 
     def _request(
-        self, url: str, data: Optional[bytes] = None, repeated: bool = False
+            self, url: str, data: Optional[bytes] = None, repeated: bool = False
     ) -> Union[bytes, None]:
         try:
             with self.session.open(url, data, 5) as r:
