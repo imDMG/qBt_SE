@@ -291,7 +291,6 @@ class Rutracker:
         except (URLError, HTTPError) as err:
             logger.error(err.reason)
             error = str(err.reason)
-            print(err.info())
             if "timed out" in error and not repeated:
                 logger.debug("Repeating request...")
                 return self._request(url, data, True)
