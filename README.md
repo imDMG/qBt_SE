@@ -7,7 +7,7 @@ Biggest russian torrent tracker.
 ## Rutor.org ![v1.4](https://img.shields.io/badge/v1.4-blue)
 Popular free russian torrent tracker.
 
-## Kinozal.tv ![v2.8](https://img.shields.io/badge/v2.8-blue)
+## Kinozal.tv ![v2.9](https://img.shields.io/badge/v2.9-blue)
 Russian torrent tracker mostly directed on movies, but have other categories.
 
 The site has a restriction on downloading torrent files (10 by default or so), so I added the ability to open the magnet link instead the file.
