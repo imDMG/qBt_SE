@@ -49,4 +49,4 @@ _*make sure that your proxy work with right protocol_
 ## Troubleshooting
 All errors will appear directly in qBittorrent as searching result.
 * torrent tracker return 403 error:
-  - some sites, sometimes, enable protection like CloudFlare, that required JavaScript. Vanilla Python has no implementation of JavaScript, that's mean search engin will be return 403 error. 
+  - Some sites, sometimes, enable protection like CloudFlare, that required JavaScript. Vanilla Python has no implementation of JavaScript, it means that search engin will be return 403 error. 
