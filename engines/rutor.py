@@ -1,4 +1,4 @@
-# VERSION: 1.4
+# VERSION: 1.5
 # AUTHORS: imDMG [imdmgg@gmail.com]
 
 # Rutor.org search engine plugin for qBittorrent
@@ -140,13 +140,12 @@ class Rutor:
                             "pictures": 3,
                             "books": 11}
 
+    # error message
+    error: Optional[str] = None
+    # establish connection
+    session = build_opener()
+
     def __init__(self):
-        # error message
-        self.error = None
-
-        # establish connection
-        self.session = build_opener()
-
         # add proxy handler if needed
         if config.proxy:
             if any(config.proxies.values()):
@@ -172,8 +171,8 @@ class Rutor:
             return None
         # do async requests
         if total > PAGES:
-            query = query.replace("h/0", "h/%i")
-            qrs = [query % x for x in rng(total)]
+            query = query.replace("h/0", "h/{}")
+            qrs = [query.format(x) for x in rng(total)]
             with ThreadPoolExecutor(len(qrs)) as executor:
                 executor.map(self.searching, qrs, timeout=30)
 
