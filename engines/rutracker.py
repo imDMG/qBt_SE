@@ -1,4 +1,4 @@
-# VERSION: 1.6
+# VERSION: 1.7
 # AUTHORS: imDMG [imdmgg@gmail.com]
 
 # rutracker.org search engine plugin for qBittorrent
@@ -15,7 +15,7 @@ from html import unescape
 from http.cookiejar import Cookie, MozillaCookieJar
 from pathlib import Path
 from tempfile import NamedTemporaryFile
-from typing import Optional, Union
+from typing import Optional
 from urllib.error import URLError, HTTPError
 from urllib.parse import urlencode, unquote
 from urllib.request import build_opener, HTTPCookieProcessor, ProxyHandler
@@ -40,8 +40,8 @@ def rng(t: int) -> range:
 
 
 RE_TORRENTS = re.compile(
-    r'data-topic_id="(\d+?)".+?">(.+?)</a.+?tor-size"\sdata-ts_text="(\d+?)">'
-    r'.+?data-ts_text="([-0-9]+?)">.+?Личи">(\d+?)</.+?data-ts_text="(\d+?)">',
+    r'<a\sdata-topic_id="(\d+?)".+?">(.+?)</a.+?tor-size"\sdata-ts_text="(\d+?)'
+    r'">.+?data-ts_text="([-0-9]+?)">.+?Личи">(\d+?)</.+?ata-ts_text="(\d+?)">',
     re.S
 )
 RE_RESULTS = re.compile(r"Результатов\sпоиска:\s(\d{1,3})\s<span", re.S)
@@ -212,6 +212,8 @@ class Rutracker:
         if self.error:
             return None
 
+        self.mcj.clear()
+
         # if we wanna use https we mast add bb_ssl=1 to cookie
         self.mcj.set_cookie(Cookie(0, "bb_ssl", "1", None, False,
                                    ".rutracker.org", True, True, "/forum/",
@@ -235,15 +237,17 @@ class Rutracker:
             self.error = "We not authorized, please check your credentials!"
             logger.warning(self.error)
 
-    def searching(self, query: str, first: bool = False) -> Union[None, int]:
+    def searching(self, query: str, first: bool = False) -> Optional[int]:
         response = self._request(query)
         if self.error:
             return None
         page, torrents_found = response.decode("cp1251"), -1
         if first:
             if "log-out-icon" not in page:
+                if "login-form-full" not in page:
+                    self.error = "Unexpected page content"
+                    return None
                 logger.debug("Looks like we lost session id, lets login")
-                self.mcj.clear()
                 self.login()
                 if self.error:
                     return None
@@ -281,7 +285,7 @@ class Rutracker:
 
     def _request(
             self, url: str, data: Optional[bytes] = None, repeated: bool = False
-    ) -> Union[bytes, None]:
+    ) -> Optional[bytes]:
         try:
             with self.session.open(url, data, 5) as r:
                 # checking that tracker isn't blocked

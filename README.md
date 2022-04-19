@@ -1,7 +1,7 @@
 [![Python 3.7+](https://img.shields.io/badge/python-%3E%3D%20v3.7-blue)](https://www.python.org/downloads/release/python-370/)
 # qBittorrent plugins
 
-## Rutracker.org ![v1.6](https://img.shields.io/badge/v1.6-blue)
+## Rutracker.org ![v1.7](https://img.shields.io/badge/v1.7-blue)
 Biggest russian torrent tracker.
 
 ## Rutor.org ![v1.5](https://img.shields.io/badge/v1.5-blue)
