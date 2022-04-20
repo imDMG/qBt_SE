@@ -1,0 +1,79 @@
+{
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "qBt_SE.schema.json",
+    "title": "qBt_SE extension settings",
+    "description": "The settings structure for the qBt_SE tracker plugin <https://github.com/imDMG/qBt_SE>",
+    "type": "object",
+    "properties": {
+        "username": {
+            "description": "Your username on the relevant tracker",
+            "type": "string"
+        },
+        "password": {
+            "description": "Your password on the relevant tracker",
+            "type": "string"
+        },
+        "torrentDate": {
+            "description": "Whether to include torrents' creation dates in search results",
+            "type": "boolean"
+        },
+        "proxy": {
+            "description": "Whether to use proxies for authenticating with tracker",
+            "type": "boolean"
+        },
+        "proxies": {
+            "description": "Proxy addresses for each HTTP protocol (only used when proxy is true)",
+            "type": "object",
+            "properties": {
+                "http": {
+                    "description": "Regular proxy as HTTP endpoint",
+                    "type": "string",
+                    "anyOf": [
+                        {
+                            "format": "ipv4"
+                        },
+                        {
+                            "format": "ipv6"
+                        },
+                        {
+                            "format": "uri"
+                        },
+                        {
+                            "format": "uri-reference"
+                        }
+                    ]
+                },
+                "https": {
+                    "description": "Secure proxy as HTTPS endpoint",
+                    "type": "string",
+                    "anyOf": [
+                        {
+                            "format": "ipv4"
+                        },
+                        {
+                            "format": "ipv6"
+                        },
+                        {
+                            "format": "uri"
+                        },
+                        {
+                            "format": "uri-reference"
+                        }
+                    ]
+                }
+            }
+        },
+        "magnet": {
+            "description": "Whether to use magnet URI for downloading",
+            "type": "boolean"
+        },
+        "ua": {
+            "description": "User-Agent string to announce to tracker for authentication",
+            "type": "string"
+        }
+    },
+    "required": [
+        "username",
+        "password"
+    ]
+}
