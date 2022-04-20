@@ -22,10 +22,10 @@ class EngineSettingsGUI:
         self.username = tk.StringVar(value=self.config.get("username", ""))
         self.password = tk.StringVar(value=self.config.get("password", ""))
         self.proxy_http = tk.StringVar(
-            value=self.config.get("proxies").get("http", "")
+            value=self.config.get("proxies").get("http", "") if isinstance(self.config.get("proxies"), dict) else None
         )
         self.proxy_https = tk.StringVar(
-            value=self.config.get("proxies").get("https", "")
+            value=self.config.get("proxies").get("https", "") if isinstance(self.config.get("proxies"), dict) else None
         )
 
         self.date = tk.BooleanVar(value=self.config.get("torrentDate", True))
