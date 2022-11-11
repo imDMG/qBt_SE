@@ -1,4 +1,4 @@
-# VERSION: 2.9
+# VERSION: 2.10
 # AUTHORS: imDMG [imdmgg@gmail.com]
 
 # Kinozal.tv search engine plugin for qBittorrent
@@ -40,7 +40,7 @@ logger = logging.getLogger(__name__)
 FILE = Path(__file__)
 BASEDIR = FILE.parent.absolute()
 
-FILENAME = FILE.name[:-3]
+FILENAME = FILE.stem
 FILE_J, FILE_C = [BASEDIR / (FILENAME + fl) for fl in (".json", ".cookie")]
 
 PAGES = 50
@@ -134,7 +134,7 @@ config = Config()
 
 class Kinozal:
     name = "Kinozal"
-    url = "http://kinozal.tv/"
+    url = "https://kinozal.tv/"
     url_dl = url.replace("//", "//dl.")
     url_login = url + "takelogin.php"
     supported_categories = {"all": "0",
