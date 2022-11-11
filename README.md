@@ -23,7 +23,7 @@ According of the name of search plugin:
 * Then follow [official tutorial](https://github.com/qbittorrent/search-plugins/wiki/Install-search-plugins).
 * _After installation you can change your settings with `*.json` file which will be created automatically in:_
   * Windows: `%localappdata%\qBittorrent\nova3\engines`
-  * Linux: `~/.local/share/qBittorrent/nova3/engines`
+  * Linux: `~/.local/share/data/qBittorrent/nova3/engines`
   * OS X: `~/Library/Application Support/qBittorrent/nova3/engines`
 * ... or you can put `settings_gui.py` into parent folder (nova3) and after this you can double-click on `*.py` file, or `Open with... -> Python`, and you should see graphic interface of your data :) 
 
