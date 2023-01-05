@@ -1,4 +1,4 @@
-# VERSION: 1.5
+# VERSION: 1.6
 # AUTHORS: imDMG [imdmgg@gmail.com]
 
 # Rutor.org search engine plugin for qBittorrent
@@ -28,8 +28,8 @@ except ImportError:
 FILE = Path(__file__)
 BASEDIR = FILE.parent.absolute()
 
-FILENAME = FILE.name[:-3]
-FILE_J, FILE_C = [BASEDIR / (FILENAME + fl) for fl in [".json", ".cookie"]]
+FILENAME = FILE.stem
+FILE_J, FILE_C = [BASEDIR / (FILENAME + fl) for fl in (".json", ".cookie")]
 
 PAGES = 100
 
@@ -39,8 +39,9 @@ def rng(t: int) -> range:
 
 
 RE_TORRENTS = re.compile(
-    r'(?:gai|tum)"><td>(.+?)</td.+?href="/(torrent/(\d+).+?)">(.+?)</a.+?right"'
-    r'>([.\d]+&nbsp;\w+)</td.+?alt="S"\s/>(.+?)</s.+?red">(.+?)</s', re.S
+    r'(?:gai|tum)"><td>(.+?)</td.+?href="(magnet:.+?)".+?href="/'
+    r'(torrent/(\d+).+?)">(.+?)</a.+?right">([.\d]+?&nbsp;\w+?)</td.+?alt="S"\s'
+    r'/>(.+?)</s.+?red">(.+?)</s', re.S
 )
 RE_RESULTS = re.compile(r"</b>\sРезультатов\sпоиска\s(\d{1,4})\s", re.S)
 PATTERNS = ("%ssearch/%i/%i/000/0/%s",)
@@ -80,7 +81,7 @@ class Config:
     # username: str = "USERNAME"
     # password: str = "PASSWORD"
     torrent_date: bool = True
-    # magnet: bool = False
+    magnet: bool = False
     proxy: bool = False
     # dynamic_proxy: bool = True
     proxies: dict = field(default_factory=lambda: {"http": "", "https": ""})
@@ -226,12 +227,12 @@ class Rutor:
 
             prettyPrinter({
                 "engine_url": self.url,
-                "desc_link": self.url + tor[1],
-                "name": torrent_date + unescape(tor[3]),
-                "link": self.url_dl + tor[2],
-                "size": unescape(tor[4]),
-                "seeds": unescape(tor[5]),
-                "leech": unescape(tor[6])
+                "desc_link": self.url + tor[2],
+                "name": torrent_date + unescape(tor[4]),
+                "link": tor[1] if config.magnet else self.url_dl + tor[3],
+                "size": unescape(tor[5]),
+                "seeds": unescape(tor[6]),
+                "leech": unescape(tor[7])
             })
 
     def _request(
