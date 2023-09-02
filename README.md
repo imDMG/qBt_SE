@@ -1,13 +1,13 @@
 [![Python 3.7+](https://img.shields.io/badge/python-%3E%3D%20v3.7-blue)](https://www.python.org/downloads/release/python-370/)
 # qBittorrent plugins
 
-## Rutracker.org ![v1.8](https://img.shields.io/badge/v1.7-blue)
+## Rutracker.org ![v1.8](https://img.shields.io/badge/v1.8-blue)
 Biggest russian torrent tracker.
 
-## Rutor.org ![v1.7](https://img.shields.io/badge/v1.6-blue)
+## Rutor.org ![v1.7](https://img.shields.io/badge/v1.7-blue)
 Popular free russian torrent tracker.
 
-## Kinozal.tv ![v2.11](https://img.shields.io/badge/v2.10-blue)
+## Kinozal.tv ![v2.11](https://img.shields.io/badge/v2.11-blue)
 Russian torrent tracker mostly directed on movies, but have other categories.
 
 The site has a restriction on downloading torrent files (10 by default or so), so I added the ability to open the magnet link instead the file.
