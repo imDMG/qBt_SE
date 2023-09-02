@@ -1,4 +1,4 @@
-# VERSION: 1.6
+# VERSION: 1.7
 # AUTHORS: imDMG [imdmgg@gmail.com]
 
 # Rutor.org search engine plugin for qBittorrent
@@ -14,7 +14,7 @@ from dataclasses import dataclass, field
 from html import unescape
 from pathlib import Path
 from tempfile import NamedTemporaryFile
-from typing import Optional, Union
+from typing import Callable
 from urllib.error import URLError, HTTPError
 from urllib.parse import unquote
 from urllib.request import build_opener, ProxyHandler
@@ -31,12 +31,6 @@ BASEDIR = FILE.parent.absolute()
 FILENAME = FILE.stem
 FILE_J, FILE_C = [BASEDIR / (FILENAME + fl) for fl in (".json", ".cookie")]
 
-PAGES = 100
-
-
-def rng(t: int) -> range:
-    return range(1, -(-t // PAGES))
-
 
 RE_TORRENTS = re.compile(
     r'(?:gai|tum)"><td>(.+?)</td.+?href="(magnet:.+?)".+?href="/'
@@ -45,6 +39,8 @@ RE_TORRENTS = re.compile(
 )
 RE_RESULTS = re.compile(r"</b>\sРезультатов\sпоиска\s(\d{1,4})\s", re.S)
 PATTERNS = ("%ssearch/%i/%i/000/0/%s",)
+
+PAGES = 100
 
 # base64 encoded image
 ICON = ("AAABAAEAEBAAAAEAGABoAwAAFgAAACgAAAAQAAAAIAAAAAEAGAAAAAAAAAAAAAAAAAAAAA"
@@ -74,6 +70,14 @@ logging.basicConfig(
 )
 
 logger = logging.getLogger(__name__)
+
+
+def rng(t: int) -> range:
+    return range(1, -(-t // PAGES))
+
+
+class EngineError(Exception):
+    ...
 
 
 @dataclass
@@ -141,73 +145,24 @@ class Rutor:
                             "pictures": 3,
                             "books": 11}
 
-    # error message
-    error: Optional[str] = None
     # establish connection
     session = build_opener()
 
-    def __init__(self):
-        # add proxy handler if needed
-        if config.proxy:
-            if any(config.proxies.values()):
-                self.session.add_handler(ProxyHandler(config.proxies))
-                logger.debug("Proxy is set!")
-            else:
-                self.error = "Proxy enabled, but not set!"
-
-        # change user-agent
-        self.session.addheaders = [("User-Agent", config.ua)]
-
     def search(self, what: str, cat: str = "all") -> None:
-        if self.error:
-            self.pretty_error(what)
-            return None
-        query = PATTERNS[0] % (self.url, 0, self.supported_categories[cat],
-                               what.replace(" ", "+"))
-
-        # make first request (maybe it enough)
-        t0, total = time.time(), self.searching(query, True)
-        if self.error:
-            self.pretty_error(what)
-            return None
-        # do async requests
-        if total > PAGES:
-            query = query.replace("h/0", "h/{}")
-            qrs = [query.format(x) for x in rng(total)]
-            with ThreadPoolExecutor(len(qrs)) as executor:
-                executor.map(self.searching, qrs, timeout=30)
-
-        logger.debug(f"--- {time.time() - t0} seconds ---")
-        logger.info(f"Found torrents: {total}")
+        self._catch_errors(self._search, what, cat)
 
     def download_torrent(self, url: str) -> None:
-        # Download url
-        response = self._request(url)
-        if self.error:
-            self.pretty_error(url)
-            return None
+        self._catch_errors(self._download_torrent, url)
 
-        # Create a torrent file
-        with NamedTemporaryFile(suffix=".torrent", delete=False) as fd:
-            fd.write(response)
-
-            # return file path
-            logger.debug(fd.name + " " + url)
-            print(fd.name + " " + url)
-
-    def searching(self, query: str, first: bool = False) -> Union[None, int]:
-        response = self._request(query)
-        if self.error:
-            return None
-        page, torrents_found = response.decode(), -1
+    def searching(self, query: str, first: bool = False) -> int:
+        page, torrents_found = self._request(query).decode(), -1
         if first:
             # firstly we check if there is a result
-            result = RE_RESULTS.search(page)
-            if not result:
-                self.error = "Unexpected page content"
-                return None
-            torrents_found = int(result[1])
-            if not torrents_found:
+            try:
+                torrents_found = int(RE_RESULTS.search(page)[1])
+            except TypeError:
+                raise EngineError("Unexpected page content")
+            if torrents_found <= 0:
                 return 0
         self.draw(page)
 
@@ -235,40 +190,87 @@ class Rutor:
                 "leech": unescape(tor[7])
             })
 
+    def _catch_errors(self, handler: Callable, *args: str):
+        try:
+            self._init()
+            handler(*args)
+        except EngineError as ex:
+            self.pretty_error(args[0], str(ex))
+        except Exception as ex:
+            self.pretty_error(args[0], "Unexpected error, please check logs")
+            logger.exception(ex)
+
+    def _init(self) -> None:
+        # add proxy handler if needed
+        if config.proxy:
+            if not any(config.proxies.values()):
+                raise EngineError("Proxy enabled, but not set!")
+            self.session.add_handler(ProxyHandler(config.proxies))
+            logger.debug("Proxy is set!")
+
+        # change user-agent
+        self.session.addheaders = [("User-Agent", config.ua)]
+
+    def _search(self, what: str, cat: str = "all") -> None:
+        query = PATTERNS[0] % (self.url, 0, self.supported_categories[cat],
+                               what.replace(" ", "+"))
+
+        # make first request (maybe it enough)
+        t0, total = time.time(), self.searching(query, True)
+        # do async requests
+        if total > PAGES:
+            query = query.replace("h/0", "h/{}")
+            qrs = [query.format(x) for x in rng(total)]
+            with ThreadPoolExecutor(len(qrs)) as executor:
+                executor.map(self.searching, qrs, timeout=30)
+
+        logger.debug(f"--- {time.time() - t0} seconds ---")
+        logger.info(f"Found torrents: {total}")
+
+    def _download_torrent(self, url: str) -> None:
+        # Download url
+        response = self._request(url)
+
+        # Create a torrent file
+        with NamedTemporaryFile(suffix=".torrent", delete=False) as fd:
+            fd.write(response)
+
+            # return file path
+            logger.debug(fd.name + " " + url)
+            print(fd.name + " " + url)
+
     def _request(
-            self, url: str, data: Optional[bytes] = None, repeated: bool = False
-    ) -> Union[bytes, None]:
+            self, url: str, data: bytes = None, repeated: bool = False
+    ) -> bytes:
         try:
             with self.session.open(url, data, 5) as r:
                 # checking that tracker isn't blocked
                 if r.geturl().startswith((self.url, self.url_dl)):
                     return r.read()
-                self.error = f"{url} is blocked. Try another proxy."
+                raise EngineError(f"{url} is blocked. Try another proxy.")
         except (URLError, HTTPError) as err:
-            logger.error(err.reason)
             error = str(err.reason)
+            reason = f"{url} is not response! Maybe it is blocked."
             if "timed out" in error and not repeated:
-                logger.debug("Repeating request...")
+                logger.debug("Request timed out. Repeating...")
                 return self._request(url, data, True)
             if "no host given" in error:
-                self.error = "Proxy is bad, try another!"
+                reason = "Proxy is bad, try another!"
             elif hasattr(err, "code"):
-                self.error = f"Request to {url} failed with status: {err.code}"
-            else:
-                self.error = f"{url} is not response! Maybe it is blocked."
+                reason = f"Request to {url} failed with status: {err.code}"
 
-        return None
+            raise EngineError(reason)
 
-    def pretty_error(self, what: str) -> None:
-        prettyPrinter({"engine_url": self.url,
-                       "desc_link": "https://github.com/imDMG/qBt_SE",
-                       "name": f"[{unquote(what)}][Error]: {self.error}",
-                       "link": self.url + "error",
-                       "size": "1 TB",  # lol
-                       "seeds": 100,
-                       "leech": 100})
-
-        self.error = None
+    def pretty_error(self, what: str, error: str) -> None:
+        prettyPrinter({
+            "engine_url": self.url,
+            "desc_link": "https://github.com/imDMG/qBt_SE",
+            "name": f"[{unquote(what)}][Error]: {error}",
+            "link": self.url + "error",
+            "size": "1 TB",  # lol
+            "seeds": 100,
+            "leech": 100
+        })
 
 
 # pep8

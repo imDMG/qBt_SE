@@ -1,4 +1,4 @@
-# VERSION: 1.7
+# VERSION: 1.8
 # AUTHORS: imDMG [imdmgg@gmail.com]
 
 # rutracker.org search engine plugin for qBittorrent
@@ -12,10 +12,10 @@ import time
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from html import unescape
-from http.cookiejar import Cookie, MozillaCookieJar
+from http.cookiejar import MozillaCookieJar
 from pathlib import Path
 from tempfile import NamedTemporaryFile
-from typing import Optional
+from typing import Callable
 from urllib.error import URLError, HTTPError
 from urllib.parse import urlencode, unquote
 from urllib.request import build_opener, HTTPCookieProcessor, ProxyHandler
@@ -29,23 +29,18 @@ except ImportError:
 FILE = Path(__file__)
 BASEDIR = FILE.parent.absolute()
 
-FILENAME = FILE.name[:-3]
-FILE_J, FILE_C = [BASEDIR / (FILENAME + fl) for fl in [".json", ".cookie"]]
-
-PAGES = 50
-
-
-def rng(t: int) -> range:
-    return range(PAGES, -(-t // PAGES) * PAGES, PAGES)
-
+FILENAME = FILE.stem
+FILE_J, FILE_C = [BASEDIR / (FILENAME + fl) for fl in (".json", ".cookie")]
 
 RE_TORRENTS = re.compile(
     r'<a\sdata-topic_id="(\d+?)".+?">(.+?)</a.+?tor-size"\sdata-ts_text="(\d+?)'
-    r'">.+?data-ts_text="([-0-9]+?)">.+?Личи">(\d+?)</.+?ata-ts_text="(\d+?)">',
+    r'">.+?data-ts_text="([-\d]+?)">.+?Личи">(\d+?)</.+?data-ts_text="(\d+?)">',
     re.S
 )
 RE_RESULTS = re.compile(r"Результатов\sпоиска:\s(\d{1,3})\s<span", re.S)
 PATTERNS = ("%stracker.php?nm=%s&c=%s", "%s&start=%s")
+
+PAGES = 50
 
 # base64 encoded image
 ICON = ("AAABAAEAEBAAAAEAIABoBAAAFgAAACgAAAAQAAAAIAAAAAEAIAAAAAAAAAAAABMLAAATCw"
@@ -81,12 +76,19 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
+def rng(t: int) -> range:
+    return range(PAGES, -(-t // PAGES) * PAGES, PAGES)
+
+
+class EngineError(Exception):
+    ...
+
+
 @dataclass
 class Config:
     username: str = "USERNAME"
     password: str = "PASSWORD"
     torrent_date: bool = True
-    # magnet: bool = False
     proxy: bool = False
     # dynamic_proxy: bool = True
     proxies: dict = field(default_factory=lambda: {"http": "", "https": ""})
@@ -103,7 +105,7 @@ class Config:
             (BASEDIR / f"{FILENAME}.ico").write_bytes(base64.b64decode(ICON))
 
     def to_str(self) -> str:
-        return json.dumps(self.to_dict(), indent=4, sort_keys=False)
+        return json.dumps(self.to_dict(), indent=4)
 
     def to_dict(self) -> dict:
         return {self._to_camel(k): v for k, v in self.__dict__.items()}
@@ -139,85 +141,19 @@ class Rutracker:
     url_login = url + "login.php"
     supported_categories = {"all": "-1"}
 
-    # error message
-    error: Optional[str] = None
     # cookies
     mcj = MozillaCookieJar()
     # establish connection
     session = build_opener(HTTPCookieProcessor(mcj))
 
-    def __init__(self):
-        # add proxy handler if needed
-        if config.proxy:
-            if any(config.proxies.values()):
-                self.session.add_handler(ProxyHandler(config.proxies))
-                logger.debug("Proxy is set!")
-            else:
-                self.error = "Proxy enabled, but not set!"
-
-        # change user-agent
-        self.session.addheaders = [("User-Agent", config.ua)]
-
-        # load local cookies
-        try:
-            self.mcj.load(FILE_C, ignore_discard=True)
-            if "bb_session" in [cookie.name for cookie in self.mcj]:
-                # if cookie.expires < int(time.time())
-                logger.info("Local cookies is loaded")
-            else:
-                logger.info("Local cookies expired or bad")
-                logger.debug(f"That we have: {[cookie for cookie in self.mcj]}")
-                self.mcj.clear()
-                self.login()
-        except FileNotFoundError:
-            self.login()
-
     def search(self, what: str, cat: str = "all") -> None:
-        if self.error:
-            self.pretty_error(what)
-            return None
-        query = PATTERNS[0] % (self.url, what.replace(" ", "+"),
-                               self.supported_categories[cat])
-
-        # make first request (maybe it enough)
-        t0, total = time.time(), self.searching(query, True)
-        if self.error:
-            self.pretty_error(what)
-            return None
-        # do async requests
-        if total > PAGES:
-            qrs = [PATTERNS[1] % (query, x) for x in rng(total)]
-            with ThreadPoolExecutor(len(qrs)) as executor:
-                executor.map(self.searching, qrs, timeout=30)
-
-        logger.debug(f"--- {time.time() - t0} seconds ---")
-        logger.info(f"Found torrents: {total}")
+        self._catch_errors(self._search, what, cat)
 
     def download_torrent(self, url: str) -> None:
-        # Download url
-        response = self._request(url)
-        if self.error:
-            self.pretty_error(url)
-            return None
-
-        # Create a torrent file
-        with NamedTemporaryFile(suffix=".torrent", delete=False) as fd:
-            fd.write(response)
-
-            # return file path
-            logger.debug(fd.name + " " + url)
-            print(fd.name + " " + url)
+        self._catch_errors(self._download_torrent, url)
 
     def login(self) -> None:
-        if self.error:
-            return None
-
         self.mcj.clear()
-
-        # if we wanna use https we mast add bb_ssl=1 to cookie
-        self.mcj.set_cookie(Cookie(0, "bb_ssl", "1", None, False,
-                                   ".rutracker.org", True, True, "/forum/",
-                                   True, True, None, False, None, None, {}))
 
         form_data = {"login_username": config.username,
                      "login_password": config.password,
@@ -227,42 +163,31 @@ class Rutracker:
         data_encoded = urlencode(form_data, encoding="cp1251").encode()
         logger.debug(f"Login. Data after: {data_encoded}")
         self._request(self.url_login, data_encoded)
-        if self.error:
-            return None
         logger.debug(f"That we have: {[cookie for cookie in self.mcj]}")
-        if "bb_session" in [cookie.name for cookie in self.mcj]:
-            self.mcj.save(FILE_C, ignore_discard=True, ignore_expires=True)
-            logger.info("We successfully authorized")
-        else:
-            self.error = "We not authorized, please check your credentials!"
-            logger.warning(self.error)
+        if "bb_session" not in [cookie.name for cookie in self.mcj]:
+            raise EngineError(
+                "We not authorized, please check your credentials!"
+            )
+        self.mcj.save(FILE_C, ignore_discard=True, ignore_expires=True)
+        logger.info("We successfully authorized")
 
-    def searching(self, query: str, first: bool = False) -> Optional[int]:
-        response = self._request(query)
-        if self.error:
-            return None
-        page, torrents_found = response.decode("cp1251"), -1
+    def searching(self, query: str, first: bool = False) -> int:
+        page, torrents_found = self._request(query).decode("cp1251"), -1
         if first:
+            # check login status
             if "log-out-icon" not in page:
                 if "login-form-full" not in page:
-                    self.error = "Unexpected page content"
-                    return None
+                    raise EngineError("Unexpected page content")
                 logger.debug("Looks like we lost session id, lets login")
                 self.login()
-                if self.error:
-                    return None
                 # retry request because guests cant search
-                response = self._request(query)
-                if self.error:
-                    return None
-                page = response.decode("cp1251")
+                page = self._request(query).decode("cp1251")
             # firstly we check if there is a result
-            result = RE_RESULTS.search(page)
-            if not result:
-                self.error = "Unexpected page content"
-                return None
-            torrents_found = int(result[1])
-            if not torrents_found:
+            try:
+                torrents_found = int(RE_RESULTS.search(page)[1])
+            except TypeError:
+                raise EngineError("Unexpected page content")
+            if torrents_found <= 0:
                 return 0
         self.draw(page)
 
@@ -283,40 +208,97 @@ class Rutracker:
                 "leech": tor[4]
             })
 
+    def _catch_errors(self, handler: Callable, *args: str):
+        try:
+            self._init()
+            handler(*args)
+        except EngineError as ex:
+            self.pretty_error(args[0], str(ex))
+        except Exception as ex:
+            self.pretty_error(args[0], "Unexpected error, please check logs")
+            logger.exception(ex)
+
+    def _init(self) -> None:
+        # add proxy handler if needed
+        if config.proxy:
+            if not any(config.proxies.values()):
+                raise EngineError("Proxy enabled, but not set!")
+            self.session.add_handler(ProxyHandler(config.proxies))
+            logger.debug("Proxy is set!")
+
+        # change user-agent
+        self.session.addheaders = [("User-Agent", config.ua)]
+
+        # load local cookies
+        try:
+            self.mcj.load(FILE_C, ignore_discard=True)
+            if "bb_session" in [cookie.name for cookie in self.mcj]:
+                # if cookie.expires < int(time.time())
+                return logger.info("Local cookies is loaded")
+            logger.info("Local cookies expired or bad, try to login")
+            logger.debug(f"That we have: {[cookie for cookie in self.mcj]}")
+        except FileNotFoundError:
+            logger.info("Local cookies not exists, try to login")
+        self.login()
+
+    def _search(self, what: str, cat: str = "all") -> None:
+        query = PATTERNS[0] % (self.url, what.replace(" ", "+"),
+                               self.supported_categories[cat])
+
+        # make first request (maybe it enough)
+        t0, total = time.time(), self.searching(query, True)
+        # do async requests
+        if total > PAGES:
+            qrs = [PATTERNS[1] % (query, x) for x in rng(total)]
+            with ThreadPoolExecutor(len(qrs)) as executor:
+                executor.map(self.searching, qrs, timeout=30)
+
+        logger.debug(f"--- {time.time() - t0} seconds ---")
+        logger.info(f"Found torrents: {total}")
+
+    def _download_torrent(self, url: str) -> None:
+        response = self._request(url)
+
+        # Create a torrent file
+        with NamedTemporaryFile(suffix=".torrent", delete=False) as fd:
+            fd.write(response)
+
+            # return file path
+            logger.debug(fd.name + " " + url)
+            print(fd.name + " " + url)
+
     def _request(
-            self, url: str, data: Optional[bytes] = None, repeated: bool = False
-    ) -> Optional[bytes]:
+            self, url: str, data: bytes = None, repeated: bool = False
+    ) -> bytes:
         try:
             with self.session.open(url, data, 5) as r:
                 # checking that tracker isn't blocked
                 if r.geturl().startswith((self.url, self.url_dl)):
                     return r.read()
-                self.error = f"{url} is blocked. Try another proxy."
+                raise EngineError(f"{url} is blocked. Try another proxy.")
         except (URLError, HTTPError) as err:
-            logger.error(err.reason)
             error = str(err.reason)
+            reason = f"{url} is not response! Maybe it is blocked."
             if "timed out" in error and not repeated:
-                logger.debug("Repeating request...")
+                logger.debug("Request timed out. Repeating...")
                 return self._request(url, data, True)
             if "no host given" in error:
-                self.error = "Proxy is bad, try another!"
+                reason = "Proxy is bad, try another!"
             elif hasattr(err, "code"):
-                self.error = f"Request to {url} failed with status: {err.code}"
-            else:
-                self.error = f"{url} is not response! Maybe it is blocked."
+                reason = f"Request to {url} failed with status: {err.code}"
 
-        return None
+            raise EngineError(reason)
 
-    def pretty_error(self, what: str) -> None:
-        prettyPrinter({"engine_url": self.url,
-                       "desc_link": "https://github.com/imDMG/qBt_SE",
-                       "name": f"[{unquote(what)}][Error]: {self.error}",
-                       "link": self.url + "error",
-                       "size": "1 TB",  # lol
-                       "seeds": 100,
-                       "leech": 100})
-
-        self.error = None
+    def pretty_error(self, what: str, error: str) -> None:
+        prettyPrinter({
+            "engine_url": self.url,
+            "desc_link": "https://github.com/imDMG/qBt_SE",
+            "name": f"[{unquote(what)}][Error]: {error}",
+            "link": self.url + "error",
+            "size": "1 TB",  # lol
+            "seeds": 100,
+            "leech": 100
+        })
 
 
 # pep8
