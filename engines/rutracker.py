@@ -1,4 +1,4 @@
-# VERSION: 1.8
+# VERSION: 1.9
 # AUTHORS: imDMG [imdmgg@gmail.com]
 
 # rutracker.org search engine plugin for qBittorrent
@@ -17,7 +17,7 @@ from pathlib import Path
 from tempfile import NamedTemporaryFile
 from typing import Callable
 from urllib.error import URLError, HTTPError
-from urllib.parse import urlencode, unquote
+from urllib.parse import urlencode, unquote, quote
 from urllib.request import build_opener, HTTPCookieProcessor, ProxyHandler
 
 try:
@@ -242,7 +242,7 @@ class Rutracker:
         self.login()
 
     def _search(self, what: str, cat: str = "all") -> None:
-        query = PATTERNS[0] % (self.url, what.replace(" ", "+"),
+        query = PATTERNS[0] % (self.url, quote(unquote(what)),
                                self.supported_categories[cat])
 
         # make first request (maybe it enough)

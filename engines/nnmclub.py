@@ -1,4 +1,4 @@
-# VERSION: 2.10
+# VERSION: 2.12
 # AUTHORS: imDMG [imdmgg@gmail.com]
 
 # NoNaMe-Club search engine plugin for qBittorrent
@@ -17,7 +17,7 @@ from pathlib import Path
 from tempfile import NamedTemporaryFile
 from typing import Callable
 from urllib.error import URLError, HTTPError
-from urllib.parse import urlencode, unquote
+from urllib.parse import urlencode, unquote, quote
 from urllib.request import build_opener, HTTPCookieProcessor, ProxyHandler
 
 try:
@@ -252,7 +252,7 @@ class NNMClub:
 
     def _search(self, what: str, cat: str = "all") -> None:
         c = self.supported_categories[cat]
-        query = PATTERNS[0] % (self.url, what.replace(" ", "+"),
+        query = PATTERNS[0] % (self.url, quote(unquote(what)),
                                "f=-1" if c == "-1" else "c=" + c)
 
         # make first request (maybe it enough)

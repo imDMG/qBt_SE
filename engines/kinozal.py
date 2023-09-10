@@ -1,4 +1,4 @@
-# VERSION: 2.11
+# VERSION: 2.12
 # AUTHORS: imDMG [imdmgg@gmail.com]
 
 # Kinozal.tv search engine plugin for qBittorrent
@@ -19,7 +19,7 @@ from pathlib import Path
 from tempfile import NamedTemporaryFile
 from typing import Callable
 from urllib.error import URLError, HTTPError
-from urllib.parse import urlencode, unquote
+from urllib.parse import urlencode, unquote, quote
 from urllib.request import build_opener, HTTPCookieProcessor, ProxyHandler
 
 try:
@@ -27,15 +27,6 @@ try:
 except ImportError:
     sys.path.insert(0, str(Path(__file__).parent.parent.absolute()))
     from novaprinter import prettyPrinter
-
-# setup logging
-logging.basicConfig(
-    format="%(asctime)s %(name)-12s %(levelname)-8s %(message)s",
-    datefmt="%m-%d %H:%M",
-    level=logging.DEBUG
-)
-
-logger = logging.getLogger(__name__)
 
 FILE = Path(__file__)
 BASEDIR = FILE.parent.absolute()
@@ -75,6 +66,15 @@ ICON = ("AAABAAEAEBAAAAEAIABoBAAAFgAAACgAAAAQAAAAIAAAAAEAIAAAAAAAQAQAAAAAAAAAAA"
         "+GVEr/qYyD/87o8f/R2dj/gEc7/wAAAACARztMgEc7/4BHO/+ARztMAAAAAIBHO0yARzv/"
         "gEc7/4BHO/+ARztMAAAAAIBHO0yARzv/gEc7/4BHO0wAAAAACCEAAAABAAAAAQAAAAEAAI"
         "ADAAAAAQAAAAEAAAABAAAAAQAAAAEAAAABAACAAwAAAAEAAAABAAAAAQAACCEAAA== ")
+
+# setup logging
+logging.basicConfig(
+    format="%(asctime)s %(name)-12s %(levelname)-8s %(message)s",
+    datefmt="%m-%d %H:%M",
+    level=logging.DEBUG
+)
+
+logger = logging.getLogger(__name__)
 
 
 def rng(t: int) -> range:
@@ -261,7 +261,7 @@ class Kinozal:
         self.login()
 
     def _search(self, what: str, cat: str = "all") -> None:
-        query = PATTERNS[0] % (self.url, what.replace(" ", "+"),
+        query = PATTERNS[0] % (self.url, quote(unquote(what)),
                                self.supported_categories[cat])
 
         # make first request (maybe it enough)

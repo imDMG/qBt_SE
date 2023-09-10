@@ -1,4 +1,4 @@
-# VERSION: 1.7
+# VERSION: 1.8
 # AUTHORS: imDMG [imdmgg@gmail.com]
 
 # Rutor.org search engine plugin for qBittorrent
@@ -16,7 +16,7 @@ from pathlib import Path
 from tempfile import NamedTemporaryFile
 from typing import Callable
 from urllib.error import URLError, HTTPError
-from urllib.parse import unquote
+from urllib.parse import unquote, quote
 from urllib.request import build_opener, ProxyHandler
 
 try:
@@ -213,7 +213,7 @@ class Rutor:
 
     def _search(self, what: str, cat: str = "all") -> None:
         query = PATTERNS[0] % (self.url, 0, self.supported_categories[cat],
-                               what.replace(" ", "+"))
+                               quote(unquote(what)))
 
         # make first request (maybe it enough)
         t0, total = time.time(), self.searching(query, True)
