@@ -16,6 +16,8 @@ You can turn off the magnet link: in `kinozal.json` switch `"magnet": true` to `
 ## NNM-Club.me ![v2.12](https://img.shields.io/badge/v2.12-blue)
 One of biggest russian torrent tracker.
 
+_Note: the tracker is very sensitive to your proxy, if something doesn’t suit it, it turns on ddos protection and return 403 error. Use `proxychecker.py` to check your proxy_
+
 ## Installation
 **For fresh installation.**
 According of the name of search plugin:
