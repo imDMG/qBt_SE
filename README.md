@@ -5,7 +5,7 @@
 Biggest russian torrent tracker.
 
 ## Rutor.org ![v1.8](https://img.shields.io/badge/v1.8-blue)
-Popular free russian torrent tracker.
+Popular free russian torrent tracker. http://rutor.info/ and http://rutor.is/ - actual domains at this time.
 
 ## Kinozal.tv ![v2.12](https://img.shields.io/badge/v2.12-blue)
 Russian torrent tracker mostly directed on movies, but have other categories.
