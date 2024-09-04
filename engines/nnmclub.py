@@ -88,7 +88,7 @@ class EngineError(Exception):
 @dataclass
 class Config:
     username: str = "USERNAME"
-    password: str = "PASSWORD"
+    cookie: str = "COOKIE"
     torrent_date: bool = True
     # magnet: bool = False
     proxy: bool = False
@@ -140,7 +140,6 @@ class NNMClub:
     name = "NoNaMe-Club"
     url = "https://nnmclub.to/forum/"
     url_dl = "https://nnm-club.ws/"
-    url_login = url + "login.php"
     supported_categories = {"all": "-1",
                             "movies": "14",
                             "tv": "27",
@@ -160,21 +159,30 @@ class NNMClub:
         self._catch_errors(self._download_torrent, url)
 
     def login(self) -> None:
+        from http.cookiejar import Cookie
         self.mcj.clear()
-
-        logger.debug("Make initial login request")
-        result = RE_CODE.search(self._request(self.url_login).decode("cp1251"))
-
-        form_data = {"username": config.username,
-                     "password": config.password,
-                     "autologin": "on",
-                     "code": result[1],
-                     "login": "Вход"}
-        # encoding to cp1251 then do default encode whole string
-        data_encoded = urlencode(form_data, encoding="cp1251").encode()
-        self._request(self.url_login, data_encoded)
-
-        logger.debug(f"That we have: {[cookie for cookie in self.mcj]}")
+        cookies = config.cookie.split('; ')
+        for cookie in cookies:
+            name, value = cookie.split('=', 1)  # Split on the first '=' to separate name and value
+            # Create a Cookie instance:
+            # 0 - version
+            # name - name of the cookie
+            # value - value of the cookie
+            # None - port
+            # None - port_specified
+            # domain - domain for the cookie, modify accordingly
+            # domain_specified - whether the domain is explicitly specified (True/False)
+            # domain_initial_dot - whether the domain starts with a dot (True/False)
+            # path - path for the cookie, modify accordingly
+            # path_specified - whether the path is explicitly specified (True/False)
+            # secure - whether the cookie is secure (True/False)
+            # expires - expiration date of the cookie (None if session cookie)
+            # discard - whether the cookie will be discarded (True/False)
+            # comment - comment for the cookie
+            # comment_url - URL for the cookie comment
+            # rest - dictionary containing additional attributes of the cookie
+            cookie = Cookie(0, name, value, None, False, 'nnmclub.to', True, False, '/', True, False, None, False, None, None, {})
+            self.mcj.set_cookie(cookie)
         if "phpbb2mysql_4_sid" not in [cookie.name for cookie in self.mcj]:
             raise EngineError(
                 "We not authorized, please check your credentials!"
