@@ -1,4 +1,4 @@
-# VERSION: 2.12
+# VERSION: 2.13
 # AUTHORS: imDMG [imdmgg@gmail.com]
 
 # NoNaMe-Club search engine plugin for qBittorrent
@@ -7,18 +7,21 @@ import base64
 import json
 import logging
 import re
+# import socket
 import sys
 import time
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from html import unescape
-from http.cookiejar import MozillaCookieJar
+from http.cookiejar import Cookie, MozillaCookieJar
 from pathlib import Path
 from tempfile import NamedTemporaryFile
 from typing import Callable
 from urllib.error import URLError, HTTPError
-from urllib.parse import urlencode, unquote, quote
+from urllib.parse import unquote, quote
 from urllib.request import build_opener, HTTPCookieProcessor, ProxyHandler
+
+# import socks
 
 try:
     from novaprinter import prettyPrinter
@@ -38,7 +41,7 @@ RE_TORRENTS = re.compile(
     r'<b>(\d+?)</b>.+?<b>(\d+?)</b>.+?<u>(\d+?)</u>', re.S
 )
 RE_RESULTS = re.compile(r'TP_VER">(?:Результатов\sпоиска:\s(\d{1,3}))?\s', re.S)
-RE_CODE = re.compile(r'name="code"\svalue="(.+?)"', re.S)
+# RE_CODE = re.compile(r'name="code"\svalue="(.+?)"', re.S)
 PATTERNS = ("%stracker.php?nm=%s&%s", "%s&start=%s")
 
 PAGES = 50
@@ -69,6 +72,8 @@ ICON = ("AAABAAEAEBAAAAEAIABoBAAAFgAAACgAAAAQAAAAIAAAAAEAIAAAAAAAAAAAAAAAAAAAAA"
 
 # setup logging
 logging.basicConfig(
+    filename=f"{BASEDIR / FILENAME}.log",
+    filemode="w",
     format="%(asctime)s %(name)-12s %(levelname)-8s %(message)s",
     datefmt="%m-%d %H:%M",
     level=logging.DEBUG
@@ -88,7 +93,7 @@ class EngineError(Exception):
 @dataclass
 class Config:
     username: str = "USERNAME"
-    cookie: str = "COOKIE"
+    cookies: str = "COOKIES"
     torrent_date: bool = True
     # magnet: bool = False
     proxy: bool = False
@@ -159,48 +164,39 @@ class NNMClub:
         self._catch_errors(self._download_torrent, url)
 
     def login(self) -> None:
-        from http.cookiejar import Cookie
         self.mcj.clear()
-        cookies = config.cookie.split('; ')
-        for cookie in cookies:
-            name, value = cookie.split('=', 1)  # Split on the first '=' to separate name and value
-            # Create a Cookie instance:
-            # 0 - version
-            # name - name of the cookie
-            # value - value of the cookie
-            # None - port
-            # None - port_specified
-            # domain - domain for the cookie, modify accordingly
-            # domain_specified - whether the domain is explicitly specified (True/False)
-            # domain_initial_dot - whether the domain starts with a dot (True/False)
-            # path - path for the cookie, modify accordingly
-            # path_specified - whether the path is explicitly specified (True/False)
-            # secure - whether the cookie is secure (True/False)
-            # expires - expiration date of the cookie (None if session cookie)
-            # discard - whether the cookie will be discarded (True/False)
-            # comment - comment for the cookie
-            # comment_url - URL for the cookie comment
-            # rest - dictionary containing additional attributes of the cookie
-            cookie = Cookie(0, name, value, None, False, 'nnmclub.to', True, False, '/', True, False, None, False, None, None, {})
-            self.mcj.set_cookie(cookie)
+        if config.cookies == "COOKIES":
+            raise EngineError("Empty cookies in config file")
+        for cookie in config.cookies.split("; "):
+            name, value = cookie.split("=", 1)
+            self.mcj.set_cookie(Cookie(
+                0, name, value, None, False, "nnmclub.to", True, False,
+                "/", True, False, None, False, None, None, {}
+            ))
+
+        logger.debug(f"That we have: {[cookie for cookie in self.mcj]}")
         if "phpbb2mysql_4_sid" not in [cookie.name for cookie in self.mcj]:
             raise EngineError(
                 "We not authorized, please check your credentials!"
             )
-        self.mcj.save(FILE_C, ignore_discard=True, ignore_expires=True)
+        self.mcj.save(str(FILE_C), ignore_discard=True, ignore_expires=True)
         logger.info("We successfully authorized")
 
     def searching(self, query: str, first: bool = False) -> int:
-        page, torrents_found = self._request(query).decode("cp1251"), -1
+        page, torrents_found = self._request(query).decode("cp1251",
+                                                           "ignore"), -1
         if first:
             # check login status
             if f"Выход [ {config.username} ]" not in page:
-                logger.debug("Looks like we lost session id, lets login")
+                logger.debug(
+                    f"Looks like we lost session id, lets login:\n {page}"
+                )
                 self.login()
             # firstly we check if there is a result
             try:
                 torrents_found = int(RE_RESULTS.search(page)[1])
             except TypeError:
+                logger.debug(f"Unexpected page content:\n {page}")
                 raise EngineError("Unexpected page content")
             if torrents_found <= 0:
                 return 0
@@ -297,11 +293,14 @@ class NNMClub:
                     return r.read()
                 raise EngineError(f"{url} is blocked. Try another proxy.")
         except (URLError, HTTPError) as err:
+            logger.debug(err)
             error = str(err.reason)
             reason = f"{url} is not response! Maybe it is blocked."
-            if "timed out" in error and not repeated:
-                logger.debug("Request timed out. Repeating...")
-                return self._request(url, data, True)
+            if "timed out" in error:
+                if not repeated:
+                    logger.debug("Request timed out. Repeating...")
+                    return self._request(url, data, True)
+                reason = "Request timed out"
             if "no host given" in error:
                 reason = "Proxy is bad, try another!"
             elif hasattr(err, "code"):
