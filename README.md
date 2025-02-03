@@ -1,13 +1,13 @@
 [![Python 3.7+](https://img.shields.io/badge/python-%3E%3D%20v3.7-blue)](https://www.python.org/downloads/release/python-370/)
 # qBittorrent plugins
 
-## Rutracker.org ![v1.9](https://img.shields.io/badge/v1.9-blue)
+## Rutracker.org ![v1.10](https://img.shields.io/badge/v1.10-blue)
 Biggest russian torrent tracker.
 
-## Rutor.org ![v1.8](https://img.shields.io/badge/v1.8-blue)
+## Rutor.org ![v1.9](https://img.shields.io/badge/v1.9-blue)
 Popular free russian torrent tracker. http://rutor.info/ and http://rutor.is/ - actual domains at this time.
 
-## Kinozal.tv ![v2.12](https://img.shields.io/badge/v2.12-blue)
+## Kinozal.tv ![v2.13](https://img.shields.io/badge/v2.13-blue)
 Russian torrent tracker mostly directed on movies, but have other categories.
 
 The site has a restriction on downloading torrent files (10 by default or so), so I added the ability to open the magnet link instead the file.
@@ -27,7 +27,7 @@ According of the name of search plugin:
   * Windows: `%localappdata%\qBittorrent\nova3\engines`
   * Linux: `~/.local/share/qBittorrent/nova3/engines`
   * OS X: `~/Library/Application Support/qBittorrent/nova3/engines`
-* ... or you can put `settings_gui.py` into parent folder (nova3) and after this you can double-click on `*.py` file, or `Open with... -> Python`, and you should see graphic interface of your data :) 
+* ... or you can put `settings_gui.py` into parent folder (nova3) and after this you can double-click on `*.py` file, or `Open with... -> Python`, and you should see graphic interface of your data :)
 
 Description of `*.json` file:
 ```
@@ -71,4 +71,4 @@ _*make sure that your proxy work with right protocol_
 ## Troubleshooting
 All errors will appear directly in qBittorrent as searching result.
 * torrent tracker return 403 error:
-  - Some sites, sometimes, enable protection like CloudFlare, that required JavaScript. Vanilla Python has no implementation of JavaScript, it means that search engine will be return 403 error. 
+  - Some sites, sometimes, enable protection like CloudFlare, that required JavaScript. Vanilla Python has no implementation of JavaScript, it means that search engine will be return 403 error.
