@@ -1,4 +1,4 @@
-# VERSION: 2.13
+# VERSION: 2.14
 # AUTHORS: imDMG [imdmgg@gmail.com]
 
 # NoNaMe-Club search engine plugin for qBittorrent
@@ -40,7 +40,7 @@ RE_TORRENTS = re.compile(
     r'topictitle"\shref="(.+?)"><b>(.+?)</b>.+?href="(d.+?)".+?<u>(\d+?)</u>.+?'
     r'<b>(\d+?)</b>.+?<b>(\d+?)</b>.+?<u>(\d+?)</u>', re.S
 )
-RE_RESULTS = re.compile(r'TP_VER">(?:Результатов\sпоиска:\s(\d{1,3}))?\s', re.S)
+RE_RESULTS = re.compile(r'TP_VER">(?:.+?:\s(\d{1,3}\s))?', re.S)
 # RE_CODE = re.compile(r'name="code"\svalue="(.+?)"', re.S)
 PATTERNS = ("%stracker.php?nm=%s&%s", "%s&start=%s")
 
@@ -194,7 +194,7 @@ class NNMClub:
                 self.login()
             # firstly we check if there is a result
             try:
-                torrents_found = int(RE_RESULTS.search(page)[1])
+                torrents_found = int(RE_RESULTS.search(page)[1] or 0)
             except TypeError:
                 logger.debug(f"Unexpected page content:\n {page}")
                 raise EngineError("Unexpected page content")
@@ -206,19 +206,15 @@ class NNMClub:
 
     def draw(self, html: str) -> None:
         for tor in RE_TORRENTS.findall(html):
-            torrent_date = ""
-            if config.torrent_date:
-                _loc = time.localtime(int(tor[6]))
-                torrent_date = f'[{time.strftime("%y.%m.%d", _loc)}] '
-
             prettyPrinter({
                 "engine_url": self.url,
                 "desc_link": self.url + tor[0],
-                "name": torrent_date + unescape(tor[1]),
+                "name": unescape(tor[1]),
                 "link": self.url + tor[2],
                 "size": tor[3],
                 "seeds": tor[4],
-                "leech": tor[5]
+                "leech": tor[5],
+                "pub_date": int(time.mktime(time.localtime(int(tor[6]))))
             })
 
     def _catch_errors(self, handler: Callable, *args: str):
@@ -244,7 +240,7 @@ class NNMClub:
 
         # load local cookies
         try:
-            self.mcj.load(FILE_C, ignore_discard=True)
+            self.mcj.load(str(FILE_C), ignore_discard=True)
             if "phpbb2mysql_4_data" in [cookie.name for cookie in self.mcj]:
                 # if cookie.expires < int(time.time())
                 return logger.info("Local cookies is loaded")
@@ -316,7 +312,8 @@ class NNMClub:
             "link": self.url + "error",
             "size": "1 TB",  # lol
             "seeds": 100,
-            "leech": 100
+            "leech": 100,
+            "pub_date": time.time_ns()
         })
 
 
