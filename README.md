@@ -13,7 +13,7 @@ Russian torrent tracker mostly directed on movies, but have other categories.
 The site has a restriction on downloading torrent files (10 by default or so), so I added the ability to open the magnet link instead the file.
 You can turn off the magnet link: in `kinozal.json` switch `"magnet": true` to `"magnet": false`
 
-## NNM-Club.me ![v2.13](https://img.shields.io/badge/v2.13-blue)
+## NNM-Club.me ![v2.14](https://img.shields.io/badge/v2.14-blue)
 One of biggest russian torrent tracker.
 
 _Note: the tracker is very sensitive to your proxy, if something doesn’t suit it, it turns on ddos protection and return 403 error. Use `proxychecker.py` to check your proxy_
