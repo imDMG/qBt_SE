@@ -1,4 +1,4 @@
-# VERSION: 1.9
+# VERSION: 1.10
 # AUTHORS: imDMG [imdmgg@gmail.com]
 
 # rutracker.org search engine plugin for qBittorrent
@@ -88,7 +88,6 @@ class EngineError(Exception):
 class Config:
     username: str = "USERNAME"
     password: str = "PASSWORD"
-    torrent_date: bool = True
     proxy: bool = False
     # dynamic_proxy: bool = True
     proxies: dict = field(default_factory=lambda: {"http": "", "https": ""})
@@ -195,17 +194,16 @@ class Rutracker:
 
     def draw(self, html: str) -> None:
         for tor in RE_TORRENTS.findall(html):
-            local = time.strftime("%y.%m.%d", time.localtime(int(tor[5])))
-            torrent_date = f"[{local}] " if config.torrent_date else ""
 
             prettyPrinter({
                 "engine_url": self.url,
                 "desc_link": self.url + "viewtopic.php?t=" + tor[0],
-                "name": torrent_date + unescape(tor[1]),
+                "name": unescape(tor[1]),
                 "link": self.url_dl + tor[0],
                 "size": tor[2],
                 "seeds": max(0, int(tor[3])),
-                "leech": tor[4]
+                "leech": tor[4],
+                "pub_date": int(tor[5])
             })
 
     def _catch_errors(self, handler: Callable, *args: str):

@@ -1,4 +1,4 @@
-# VERSION: 1.8
+# VERSION: 1.9
 # AUTHORS: imDMG [imdmgg@gmail.com]
 
 # Rutor.org search engine plugin for qBittorrent
@@ -84,7 +84,6 @@ class EngineError(Exception):
 class Config:
     # username: str = "USERNAME"
     # password: str = "PASSWORD"
-    torrent_date: bool = True
     magnet: bool = False
     proxy: bool = False
     # dynamic_proxy: bool = True
@@ -170,24 +169,23 @@ class Rutor:
 
     def draw(self, html: str) -> None:
         for tor in RE_TORRENTS.findall(html):
-            torrent_date = ""
-            if config.torrent_date:
-                # replace names month
-                months = ("Янв", "Фев", "Мар", "Апр", "Май", "Июн",
-                          "Июл", "Авг", "Сен", "Окт", "Ноя", "Дек")
-                ct = [unescape(tor[0].replace(m, f"{i:02d}"))
-                      for i, m in enumerate(months, 1) if m in tor[0]][0]
-                ct = time.strftime("%y.%m.%d", time.strptime(ct, "%d %m %y"))
-                torrent_date = f"[{ct}] "
+            # replace names month
+            months = ("Янв", "Фев", "Мар", "Апр", "Май", "Июн",
+                        "Июл", "Авг", "Сен", "Окт", "Ноя", "Дек")
+            ct = [unescape(tor[0].replace(m, f"{i:02d}"))
+                    for i, m in enumerate(months, 1) if m in tor[0]][0]
+            time_obj = time.strptime(ct, "%d %m %y")
+            unix_timestamp = int(time.mktime(time_obj))
 
             prettyPrinter({
                 "engine_url": self.url,
                 "desc_link": self.url + tor[2],
-                "name": torrent_date + unescape(tor[4]),
+                "name": unescape(tor[4]),
                 "link": tor[1] if config.magnet else self.url_dl + tor[3],
-                "size": unescape(tor[5]),
+                "size": unescape(tor[5].replace("&nbsp;", " ")),
                 "seeds": unescape(tor[6]),
-                "leech": unescape(tor[7])
+                "leech": unescape(tor[7]),
+                "pub_date": unix_timestamp
             })
 
     def _catch_errors(self, handler: Callable, *args: str):

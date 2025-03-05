@@ -1,4 +1,4 @@
-# VERSION: 2.12
+# VERSION: 2.13
 # AUTHORS: imDMG [imdmgg@gmail.com]
 
 # Kinozal.tv search engine plugin for qBittorrent
@@ -89,7 +89,6 @@ class EngineError(Exception):
 class Config:
     username: str = "USERNAME"
     password: str = "PASSWORD"
-    torrent_date: bool = True
     magnet: bool = False
     proxy: bool = False
     # dynamic_proxy: bool = True
@@ -206,25 +205,23 @@ class Kinozal:
         # replace size units
         table = {"Т": "T", "Г": "G", "М": "M", "К": "K", "Б": "B"}
         for tor in RE_TORRENTS.findall(html):
-            torrent_date = ""
-            if config.torrent_date:
-                ct = tor[5].split()[0]
-                if "сегодня" in ct:
-                    torrent_date = _part()
-                elif "вчера" in ct:
-                    torrent_date = yesterday
-                else:
-                    torrent_date = _part(time.strptime(ct, "%d.%m.%Y"))
-                torrent_date = f"[{torrent_date}] "
+            ct = tor[5].split()[0]
+            if "сегодня" in ct:
+                unix_timestamp = int(time.time())
+            elif "вчера" in ct:
+                unix_timestamp = int(time.time() - 86400)
+            else:
+                unix_timestamp = int(time.mktime(time.strptime(ct, "%d.%m.%Y")))
 
             prettyPrinter({
                 "engine_url": self.url,
                 "desc_link": self.url + tor[0],
-                "name": torrent_date + unescape(tor[1]),
+                "name": unescape(tor[1]),
                 "link": f"{self.url_dl}download.php?id={tor[0].split('=')[-1]}",
                 "size": tor[2].translate(tor[2].maketrans(table)),
                 "seeds": tor[3],
-                "leech": tor[4]
+                "leech": tor[4],
+                "pub_date": unix_timestamp
             })
 
     def _catch_errors(self, handler: Callable, *args: str):
