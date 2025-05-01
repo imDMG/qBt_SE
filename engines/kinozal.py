@@ -358,7 +358,7 @@ class Kinozal:
             "size": "1 TB",  # lol
             "seeds": 100,
             "leech": 100,
-            "pub_date": time.time_ns()
+            "pub_date": int(time.time())
         })
 
 
