@@ -1,4 +1,4 @@
-# VERSION: 1.9
+# VERSION: 1.10
 # AUTHORS: imDMG [imdmgg@gmail.com]
 
 # Rutor.org search engine plugin for qBittorrent
@@ -7,6 +7,7 @@ import base64
 import json
 import logging
 import re
+import socket
 import sys
 import time
 from concurrent.futures.thread import ThreadPoolExecutor
@@ -16,8 +17,10 @@ from pathlib import Path
 from tempfile import NamedTemporaryFile
 from typing import Callable
 from urllib.error import URLError, HTTPError
-from urllib.parse import unquote, quote
+from urllib.parse import unquote, quote, urlparse
 from urllib.request import build_opener, ProxyHandler
+
+import socks
 
 try:
     from novaprinter import prettyPrinter
@@ -180,11 +183,11 @@ class Rutor:
             prettyPrinter({
                 "engine_url": self.url,
                 "desc_link": self.url + tor[2],
-                "name": unescape(tor[4]),
+                "name": str(unescape(tor[4])),
                 "link": tor[1] if config.magnet else self.url_dl + tor[3],
-                "size": unescape(tor[5].replace("&nbsp;", " ")),
-                "seeds": unescape(tor[6]),
-                "leech": unescape(tor[7]),
+                "size": str(unescape(tor[5].replace("&nbsp;", " "))),
+                "seeds": int(unescape(tor[6])),
+                "leech": int(unescape(tor[7])),
                 "pub_date": unix_timestamp
             })
 
@@ -203,7 +206,23 @@ class Rutor:
         if config.proxy:
             if not any(config.proxies.values()):
                 raise EngineError("Proxy enabled, but not set!")
-            self.session.add_handler(ProxyHandler(config.proxies))
+            # socks5 support
+            for proxy_str in config.proxies.values():
+                if not proxy_str.startswith("socks"):
+                    continue
+                url = urlparse(proxy_str)
+                socks.set_default_proxy(
+                    socks.PROXY_TYPE_SOCKS5,
+                    url.hostname,
+                    url.port,
+                    True,
+                    url.username,
+                    url.password
+                )
+                socket.socket = socks.socksocket
+                break
+            else:
+                self.session.add_handler(ProxyHandler(config.proxies))
             logger.debug("Proxy is set!")
 
         # change user-agent
@@ -267,7 +286,8 @@ class Rutor:
             "link": self.url + "error",
             "size": "1 TB",  # lol
             "seeds": 100,
-            "leech": 100
+            "leech": 100,
+            "pub_date": time.time_ns()
         })
 
 

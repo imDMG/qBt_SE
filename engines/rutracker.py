@@ -1,4 +1,4 @@
-# VERSION: 1.10
+# VERSION: 1.11
 # AUTHORS: imDMG [imdmgg@gmail.com]
 
 # rutracker.org search engine plugin for qBittorrent
@@ -7,6 +7,7 @@ import base64
 import json
 import logging
 import re
+import socket
 import sys
 import time
 from concurrent.futures import ThreadPoolExecutor
@@ -17,8 +18,10 @@ from pathlib import Path
 from tempfile import NamedTemporaryFile
 from typing import Callable
 from urllib.error import URLError, HTTPError
-from urllib.parse import urlencode, unquote, quote
+from urllib.parse import urlencode, unquote, quote, urlparse
 from urllib.request import build_opener, HTTPCookieProcessor, ProxyHandler
+
+import socks
 
 try:
     from novaprinter import prettyPrinter
@@ -167,7 +170,7 @@ class Rutracker:
             raise EngineError(
                 "We not authorized, please check your credentials!"
             )
-        self.mcj.save(FILE_C, ignore_discard=True, ignore_expires=True)
+        self.mcj.save(str(FILE_C), ignore_discard=True, ignore_expires=True)
         logger.info("We successfully authorized")
 
     def searching(self, query: str, first: bool = False) -> int:
@@ -198,7 +201,7 @@ class Rutracker:
             prettyPrinter({
                 "engine_url": self.url,
                 "desc_link": self.url + "viewtopic.php?t=" + tor[0],
-                "name": unescape(tor[1]),
+                "name": str(unescape(tor[1])),
                 "link": self.url_dl + tor[0],
                 "size": tor[2],
                 "seeds": max(0, int(tor[3])),
@@ -221,7 +224,23 @@ class Rutracker:
         if config.proxy:
             if not any(config.proxies.values()):
                 raise EngineError("Proxy enabled, but not set!")
-            self.session.add_handler(ProxyHandler(config.proxies))
+            # socks5 support
+            for proxy_str in config.proxies.values():
+                if not proxy_str.startswith("socks"):
+                    continue
+                url = urlparse(proxy_str)
+                socks.set_default_proxy(
+                    socks.PROXY_TYPE_SOCKS5,
+                    url.hostname,
+                    url.port,
+                    True,
+                    url.username,
+                    url.password
+                )
+                socket.socket = socks.socksocket
+                break
+            else:
+                self.session.add_handler(ProxyHandler(config.proxies))
             logger.debug("Proxy is set!")
 
         # change user-agent
@@ -229,7 +248,7 @@ class Rutracker:
 
         # load local cookies
         try:
-            self.mcj.load(FILE_C, ignore_discard=True)
+            self.mcj.load(str(FILE_C), ignore_discard=True)
             if "bb_session" in [cookie.name for cookie in self.mcj]:
                 # if cookie.expires < int(time.time())
                 return logger.info("Local cookies is loaded")
@@ -295,7 +314,8 @@ class Rutracker:
             "link": self.url + "error",
             "size": "1 TB",  # lol
             "seeds": 100,
-            "leech": 100
+            "leech": 100,
+            "pub_date": time.time_ns()
         })
 
 

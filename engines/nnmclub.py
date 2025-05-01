@@ -1,4 +1,4 @@
-# VERSION: 2.14
+# VERSION: 2.15
 # AUTHORS: imDMG [imdmgg@gmail.com]
 
 # NoNaMe-Club search engine plugin for qBittorrent
@@ -7,7 +7,7 @@ import base64
 import json
 import logging
 import re
-# import socket
+import socket
 import sys
 import time
 from concurrent.futures import ThreadPoolExecutor
@@ -18,10 +18,10 @@ from pathlib import Path
 from tempfile import NamedTemporaryFile
 from typing import Callable
 from urllib.error import URLError, HTTPError
-from urllib.parse import unquote, quote
+from urllib.parse import unquote, quote, urlparse
 from urllib.request import build_opener, HTTPCookieProcessor, ProxyHandler
 
-# import socks
+import socks
 
 try:
     from novaprinter import prettyPrinter
@@ -94,7 +94,6 @@ class EngineError(Exception):
 class Config:
     username: str = "USERNAME"
     cookies: str = "COOKIES"
-    torrent_date: bool = True
     # magnet: bool = False
     proxy: bool = False
     # dynamic_proxy: bool = True
@@ -209,7 +208,7 @@ class NNMClub:
             prettyPrinter({
                 "engine_url": self.url,
                 "desc_link": self.url + tor[0],
-                "name": unescape(tor[1]),
+                "name": str(unescape(tor[1])),
                 "link": self.url + tor[2],
                 "size": tor[3],
                 "seeds": tor[4],
@@ -232,7 +231,23 @@ class NNMClub:
         if config.proxy:
             if not any(config.proxies.values()):
                 raise EngineError("Proxy enabled, but not set!")
-            self.session.add_handler(ProxyHandler(config.proxies))
+            # socks5 support
+            for proxy_str in config.proxies.values():
+                if not proxy_str.startswith("socks"):
+                    continue
+                url = urlparse(proxy_str)
+                socks.set_default_proxy(
+                    socks.PROXY_TYPE_SOCKS5,
+                    url.hostname,
+                    url.port,
+                    True,
+                    url.username,
+                    url.password
+                )
+                socket.socket = socks.socksocket
+                break
+            else:
+                self.session.add_handler(ProxyHandler(config.proxies))
             logger.debug("Proxy is set!")
 
         # change user-agent
@@ -248,7 +263,7 @@ class NNMClub:
             logger.debug(f"That we have: {[cookie for cookie in self.mcj]}")
         except FileNotFoundError:
             logger.info("Local cookies not exists, try to login")
-        self.login()
+        return self.login()
 
     def _search(self, what: str, cat: str = "all") -> None:
         c = self.supported_categories[cat]

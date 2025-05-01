@@ -3,9 +3,10 @@ import functools
 import time
 import threading
 from concurrent.futures.thread import ThreadPoolExecutor
+from http.client import HTTPResponse
 from urllib.request import build_opener, ProxyHandler
 
-HOST = "http://rutor.info"
+HOST = "https://rutor.info/"
 SCHEME = HOST[:HOST.rfind("://")]
 PROXY_FILE = "proxylist.txt"  # one address per line
 
@@ -48,14 +49,14 @@ def is_good_proxy(proxy: str) -> bool:
     try:
         opener = build_opener(ProxyHandler({f"{SCHEME}": proxy}))
         opener.addheaders = [("User-agent", "Mozilla/5.0")]
-        with opener.open(HOST, timeout=3) as r:
+        with opener.open(HOST, timeout=3) as r:  # type: HTTPResponse
+            print(r.getcode())
             if not r.geturl().startswith(HOST):
                 raise Exception()
+            print(proxy)
+            return True
     except OSError:
         return False
-    else:
-        print(proxy)
-        return True
 
 
 def main():
