@@ -38,7 +38,7 @@ Description of `*.json` file:
     "proxy": false, <- switchng proxy (true/false)
     "proxies": {
         "http": "", <- ex. "proxy.example.org:8080"
-        "https": "" <- ex. "127.0.0.1:3128" or "socks5://localhost:9050"
+        "https": "" <- ex. "127.0.0.1:3128" or "socks5://127.0.0.1:9050"
     },
     "magnet": false, <- switching magnet download (true/false)
     "ua": "Mozilla/5.0 (X11; Linux i686; rv:38.0) Gecko/20100101 Firefox/38.0 " <- browser User-Agent
