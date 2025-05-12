@@ -1,4 +1,4 @@
-# VERSION: 2.15
+# VERSION: 2.16
 # AUTHORS: imDMG [imdmgg@gmail.com]
 
 # NoNaMe-Club search engine plugin for qBittorrent
@@ -233,7 +233,7 @@ class NNMClub:
                 raise EngineError("Proxy enabled, but not set!")
             # socks5 support
             for proxy_str in config.proxies.values():
-                if not proxy_str.startswith("socks"):
+                if not proxy_str.lower().startswith("socks"):
                     continue
                 url = urlparse(proxy_str)
                 socks.set_default_proxy(

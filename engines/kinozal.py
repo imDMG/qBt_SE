@@ -1,4 +1,4 @@
-# VERSION: 2.14
+# VERSION: 2.15
 # AUTHORS: imDMG [imdmgg@gmail.com]
 
 # Kinozal.tv search engine plugin for qBittorrent
@@ -13,7 +13,6 @@ import sys
 import time
 from concurrent.futures.thread import ThreadPoolExecutor
 from dataclasses import dataclass, field
-from functools import partial
 from html import unescape
 from http.cookiejar import MozillaCookieJar
 from pathlib import Path
@@ -82,6 +81,22 @@ logger = logging.getLogger(__name__)
 
 def rng(t: int) -> range:
     return range(1, -(-t // PAGES))
+
+
+def date_normalize(date_str: str) -> int:
+    if "сейчас" in date_str:
+        return int(time.time())
+
+    pub_date, _, pub_time = date_str.split()
+    if "сегодня" in pub_date:
+        pub_date = time.strftime("%d.%m.%Y", time.localtime())
+    elif "вчера" in pub_date:
+        pub_date = time.strftime(
+            "%d.%m.%Y", time.localtime(time.time() - 86400)
+        )
+    return int(time.mktime(time.strptime(
+        f"{pub_date} {pub_time}", "%d.%m.%Y %H:%M"
+    )))
 
 
 class EngineError(Exception):
@@ -202,20 +217,8 @@ class Kinozal:
         return torrents_found
 
     def draw(self, html: str) -> None:
-        _part = partial(time.strftime, "%y.%m.%d")
-        # yeah this is yesterday
-        yesterday = _part(time.localtime(time.time() - 86400))
-        # replace size units
         table = {"Т": "T", "Г": "G", "М": "M", "К": "K", "Б": "B"}
         for tor in RE_TORRENTS.findall(html):
-            ct = tor[5].split()[0]
-            if "сегодня" in ct:
-                unix_timestamp = int(time.time())
-            elif "вчера" in ct:
-                unix_timestamp = int(time.time() - 86400)
-            else:
-                unix_timestamp = int(time.mktime(time.strptime(ct, "%d.%m.%Y")))
-
             prettyPrinter({
                 "engine_url": self.url,
                 "desc_link": self.url + tor[0],
@@ -224,7 +227,7 @@ class Kinozal:
                 "size": tor[2].translate(tor[2].maketrans(table)),
                 "seeds": tor[3],
                 "leech": tor[4],
-                "pub_date": unix_timestamp
+                "pub_date": date_normalize(tor[5])
             })
 
     def _catch_errors(self, handler: Callable, *args: str):
@@ -244,7 +247,7 @@ class Kinozal:
                 raise EngineError("Proxy enabled, but not set!")
             # socks5 support
             for proxy_str in config.proxies.values():
-                if not proxy_str.startswith("socks"):
+                if not proxy_str.lower().startswith("socks"):
                     continue
                 url = urlparse(proxy_str)
                 socks.set_default_proxy(

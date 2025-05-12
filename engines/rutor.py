@@ -1,4 +1,4 @@
-# VERSION: 1.10
+# VERSION: 1.11
 # AUTHORS: imDMG [imdmgg@gmail.com]
 
 # Rutor.org search engine plugin for qBittorrent
@@ -77,6 +77,15 @@ logger = logging.getLogger(__name__)
 
 def rng(t: int) -> range:
     return range(1, -(-t // PAGES))
+
+
+def date_normalize(date_str: str) -> int:
+    # replace names month
+    months = ("Янв", "Фев", "Мар", "Апр", "Май", "Июн",
+              "Июл", "Авг", "Сен", "Окт", "Ноя", "Дек")
+    date_str = [unescape(date_str.replace(m, f"{i:02d}"))
+          for i, m in enumerate(months, 1) if m in date_str][0]
+    return int(time.mktime(time.strptime(date_str, "%d %m %y")))
 
 
 class EngineError(Exception):
@@ -172,14 +181,6 @@ class Rutor:
 
     def draw(self, html: str) -> None:
         for tor in RE_TORRENTS.findall(html):
-            # replace names month
-            months = ("Янв", "Фев", "Мар", "Апр", "Май", "Июн",
-                        "Июл", "Авг", "Сен", "Окт", "Ноя", "Дек")
-            ct = [unescape(tor[0].replace(m, f"{i:02d}"))
-                    for i, m in enumerate(months, 1) if m in tor[0]][0]
-            time_obj = time.strptime(ct, "%d %m %y")
-            unix_timestamp = int(time.mktime(time_obj))
-
             prettyPrinter({
                 "engine_url": self.url,
                 "desc_link": self.url + tor[2],
@@ -188,7 +189,7 @@ class Rutor:
                 "size": str(unescape(tor[5].replace("&nbsp;", " "))),
                 "seeds": int(unescape(tor[6])),
                 "leech": int(unescape(tor[7])),
-                "pub_date": unix_timestamp
+                "pub_date": date_normalize(tor[0])
             })
 
     def _catch_errors(self, handler: Callable, *args: str):
@@ -208,7 +209,7 @@ class Rutor:
                 raise EngineError("Proxy enabled, but not set!")
             # socks5 support
             for proxy_str in config.proxies.values():
-                if not proxy_str.startswith("socks"):
+                if not proxy_str.lower().startswith("socks"):
                     continue
                 url = urlparse(proxy_str)
                 socks.set_default_proxy(

@@ -1,4 +1,4 @@
-# VERSION: 1.11
+# VERSION: 1.12
 # AUTHORS: imDMG [imdmgg@gmail.com]
 
 # rutracker.org search engine plugin for qBittorrent
@@ -206,7 +206,7 @@ class Rutracker:
                 "size": tor[2],
                 "seeds": max(0, int(tor[3])),
                 "leech": tor[4],
-                "pub_date": int(tor[5])
+                "pub_date": int(time.mktime(time.localtime(int(tor[6]))))
             })
 
     def _catch_errors(self, handler: Callable, *args: str):
@@ -226,7 +226,7 @@ class Rutracker:
                 raise EngineError("Proxy enabled, but not set!")
             # socks5 support
             for proxy_str in config.proxies.values():
-                if not proxy_str.startswith("socks"):
+                if not proxy_str.lower().startswith("socks"):
                     continue
                 url = urlparse(proxy_str)
                 socks.set_default_proxy(
