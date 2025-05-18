@@ -1,4 +1,4 @@
-# VERSION: 1.12
+# VERSION: 1.13
 # AUTHORS: imDMG [imdmgg@gmail.com]
 
 # rutracker.org search engine plugin for qBittorrent
@@ -33,7 +33,8 @@ FILE = Path(__file__)
 BASEDIR = FILE.parent.absolute()
 
 FILENAME = FILE.stem
-FILE_J, FILE_C = [BASEDIR / (FILENAME + fl) for fl in (".json", ".cookie")]
+FILE_J, FILE_C, FILE_L = [BASEDIR / (FILENAME + fl)
+                          for fl in (".json", ".cookie", ".log")]
 
 RE_TORRENTS = re.compile(
     r'<a\sdata-topic_id="(\d+?)".+?">(.+?)</a.+?tor-size"\sdata-ts_text="(\d+?)'
@@ -73,7 +74,9 @@ ICON = ("AAABAAEAEBAAAAEAIABoBAAAFgAAACgAAAAQAAAAIAAAAAEAIAAAAAAAAAAAABMLAAATCw"
 logging.basicConfig(
     format="%(asctime)s %(name)-12s %(levelname)-8s %(message)s",
     datefmt="%m-%d %H:%M",
-    level=logging.DEBUG
+    level=logging.DEBUG,
+    filemode="w",
+    filename=FILE_L,
 )
 
 logger = logging.getLogger(__name__)
@@ -184,7 +187,7 @@ class Rutracker:
                 self.login()
                 # retry request because guests cant search
                 page = self._request(query).decode("cp1251")
-            # firstly we check if there is a result
+            # firstly, we check if there is a result
             try:
                 torrents_found = int(RE_RESULTS.search(page)[1])
             except TypeError:
@@ -197,7 +200,6 @@ class Rutracker:
 
     def draw(self, html: str) -> None:
         for tor in RE_TORRENTS.findall(html):
-
             prettyPrinter({
                 "engine_url": self.url,
                 "desc_link": self.url + "viewtopic.php?t=" + tor[0],
@@ -206,7 +208,7 @@ class Rutracker:
                 "size": tor[2],
                 "seeds": max(0, int(tor[3])),
                 "leech": tor[4],
-                "pub_date": int(time.mktime(time.localtime(int(tor[6]))))
+                "pub_date": int(time.mktime(time.localtime(int(tor[5]))))
             })
 
     def _catch_errors(self, handler: Callable, *args: str):
@@ -214,6 +216,7 @@ class Rutracker:
             self._init()
             handler(*args)
         except EngineError as ex:
+            logger.exception(ex)
             self.pretty_error(args[0], str(ex))
         except Exception as ex:
             self.pretty_error(args[0], "Unexpected error, please check logs")
@@ -309,7 +312,7 @@ class Rutracker:
     def pretty_error(self, what: str, error: str) -> None:
         prettyPrinter({
             "engine_url": self.url,
-            "desc_link": "https://github.com/imDMG/qBt_SE",
+            "desc_link": f"file://{FILE_L}",
             "name": f"[{unquote(what)}][Error]: {error}",
             "link": self.url + "error",
             "size": "1 TB",  # lol
