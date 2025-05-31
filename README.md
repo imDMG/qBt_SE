@@ -1,19 +1,19 @@
 [![Python 3.7+](https://img.shields.io/badge/python-%3E%3D%20v3.7-blue)](https://www.python.org/downloads/release/python-370/)
 # qBittorrent plugins
 
-## Rutracker.org ![v1.13](https://img.shields.io/badge/v1.13-blue)
+## Rutracker.org ![v1.14](https://img.shields.io/badge/v1.14-blue)
 Biggest russian torrent tracker.
 
-## Rutor.org ![v1.11](https://img.shields.io/badge/v1.11-blue)
+## Rutor.org ![v1.13](https://img.shields.io/badge/v1.13-blue)
 Popular free russian torrent tracker. http://rutor.info/ and http://rutor.is/ - actual domains at this time.
 
-## Kinozal.tv ![v2.15](https://img.shields.io/badge/v2.15-blue)
+## Kinozal.tv ![v2.17](https://img.shields.io/badge/v2.17-blue)
 Russian torrent tracker mostly directed on movies, but have other categories.
 
 The site has a restriction on downloading torrent files (10 by default or so), so I added the ability to open the magnet link instead the file.
 You can turn off the magnet link: in `kinozal.json` switch `"magnet": true` to `"magnet": false`
 
-## NNM-Club.me ![v2.16](https://img.shields.io/badge/v2.16-blue)
+## NNM-Club.me ![v2.18](https://img.shields.io/badge/v2.18-blue)
 One of biggest russian torrent tracker.
 
 _Note: the tracker is very sensitive to your proxy, if something doesn’t suit it, it turns on ddos protection and return 403 error. Use `proxychecker.py` to check your proxy_
@@ -69,6 +69,6 @@ _*make sure that your proxy work with right protocol_
 **For update just reinstall `*.py` file.**
 
 ## Troubleshooting
-All errors will appear directly in qBittorrent as searching result.
+All errors will appear directly in qBittorrent as a searching result. For error details right-click on a result Copy→Description page URL, then paste in your web-browser address bar.
 * torrent tracker return 403 error:
   - Some sites, sometimes, enable protection like CloudFlare, that required JavaScript. Vanilla Python has no implementation of JavaScript, it means that search engine will be return 403 error.

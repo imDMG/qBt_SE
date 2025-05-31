@@ -1,4 +1,4 @@
-# VERSION: 2.15
+# VERSION: 2.17
 # AUTHORS: imDMG [imdmgg@gmail.com]
 
 # Kinozal.tv search engine plugin for qBittorrent
@@ -34,11 +34,13 @@ FILE = Path(__file__)
 BASEDIR = FILE.parent.absolute()
 
 FILENAME = FILE.stem
-FILE_J, FILE_C = [BASEDIR / (FILENAME + fl) for fl in (".json", ".cookie")]
+FILE_J, FILE_C, FILE_L = [BASEDIR / (FILENAME + fl)
+                          for fl in (".json", ".cookie", ".log")]
 
 RE_TORRENTS = re.compile(
-    r'nam"><a\s+?href="/(.+?)"\s+?class="r\d">(.+?)</a>.+?s\'>.+?s\'>(.+?)<.+?'
-    r'sl_s\'>(\d+?)<.+?sl_p\'>(\d+?)<.+?s\'>(.+?)</td>', re.S
+    r'nam"><a\s+?href="/(?P<desc_link>.+?)"\s+?class="r\d">(?P<name>.+?)'
+    r'</a>.+?s\'>.+?s\'>(?P<size>.+?)<.+?sl_s\'>(?P<seeds>\d+?)<.+?sl_p\''
+    r'>(?P<leech>\d+?)<.+?s\'>(?P<pub_date>.+?)</td>', re.S
 )
 RE_RESULTS = re.compile(r"</span>Найдено\s+?(\d+?)\s+?раздач", re.S)
 PATTERNS = ("%sbrowse.php?s=%s&c=%s", "%s&page=%s")
@@ -71,9 +73,11 @@ ICON = ("AAABAAEAEBAAAAEAIABoBAAAFgAAACgAAAAQAAAAIAAAAAEAIAAAAAAAQAQAAAAAAAAAAA"
 
 # setup logging
 logging.basicConfig(
+    filemode="w",
+    filename=FILE_L,
     format="%(asctime)s %(name)-12s %(levelname)-8s %(message)s",
     datefmt="%m-%d %H:%M",
-    level=logging.DEBUG
+    level=logging.DEBUG,
 )
 
 logger = logging.getLogger(__name__)
@@ -205,10 +209,11 @@ class Kinozal:
             if "Гость! ( Зарегистрируйтесь )" in page:
                 logger.debug("Looks like we lost session id, lets login")
                 self.login()
-            # firstly we check if there is a result
+            # firstly, we check if there is a result
             try:
                 torrents_found = int(RE_RESULTS.search(page)[1])
             except TypeError:
+                logger.debug(f"Unexpected page content:\n {page}")
                 raise EngineError("Unexpected page content")
             if torrents_found <= 0:
                 return 0
@@ -218,16 +223,20 @@ class Kinozal:
 
     def draw(self, html: str) -> None:
         table = {"Т": "T", "Г": "G", "М": "M", "К": "K", "Б": "B"}
-        for tor in RE_TORRENTS.findall(html):
+        for tor in RE_TORRENTS.finditer(html):
             prettyPrinter({
+                "link": "{}download.php?id={}".format(
+                    self.url_dl, tor.group("desc_link").split("=")[-1]
+                ),
+                "name": unescape(tor.group("name")),
+                "size": tor.group("size").translate(
+                    tor.group("size").maketrans(table)
+                ),
+                "seeds": int(tor.group("seeds")),
+                "leech": int(tor.group("leech")),
                 "engine_url": self.url,
-                "desc_link": self.url + tor[0],
-                "name": str(unescape(tor[1])),
-                "link": f"{self.url_dl}download.php?id={tor[0].split('=')[-1]}",
-                "size": tor[2].translate(tor[2].maketrans(table)),
-                "seeds": tor[3],
-                "leech": tor[4],
-                "pub_date": date_normalize(tor[5])
+                "desc_link": self.url + tor.group("desc_link"),
+                "pub_date": date_normalize(tor.group("pub_date")),
             })
 
     def _catch_errors(self, handler: Callable, *args: str):
@@ -235,6 +244,7 @@ class Kinozal:
             self._init()
             handler(*args)
         except EngineError as ex:
+            logger.exception(ex)
             self.pretty_error(args[0], str(ex))
         except Exception as ex:
             self.pretty_error(args[0], "Unexpected error, please check logs")
@@ -300,18 +310,6 @@ class Kinozal:
             url = "%sget_srv_details.php?action=2&id=%s" % (self.url,
                                                             url.split("=")[1])
 
-        # response = self._request(url)
-        #
-        # if config.magnet:
-        #     if response.startswith(b"\x1f\x8b\x08"):
-        #         response = gzip.decompress(response)
-        #     path = "magnet:?xt=urn:btih:" + response.decode()[18:58]
-        # else:
-        #     # Create a torrent file
-        #     with NamedTemporaryFile(suffix=".torrent", delete=False) as fd:
-        #         fd.write(response)
-        #         path = fd.name
-
         path = self._get_download_path(self._request(url))
 
         # return magnet link / file path
@@ -355,7 +353,7 @@ class Kinozal:
     def pretty_error(self, what: str, error: str) -> None:
         prettyPrinter({
             "engine_url": self.url,
-            "desc_link": "https://github.com/imDMG/qBt_SE",
+            "desc_link": f"file://{FILE_L}",
             "name": f"[{unquote(what)}][Error]: {error}",
             "link": self.url + "error",
             "size": "1 TB",  # lol

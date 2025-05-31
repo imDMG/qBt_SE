@@ -1,4 +1,4 @@
-# VERSION: 1.13
+# VERSION: 1.14
 # AUTHORS: imDMG [imdmgg@gmail.com]
 
 # rutracker.org search engine plugin for qBittorrent
@@ -37,8 +37,9 @@ FILE_J, FILE_C, FILE_L = [BASEDIR / (FILENAME + fl)
                           for fl in (".json", ".cookie", ".log")]
 
 RE_TORRENTS = re.compile(
-    r'<a\sdata-topic_id="(\d+?)".+?">(.+?)</a.+?tor-size"\sdata-ts_text="(\d+?)'
-    r'">.+?data-ts_text="([-\d]+?)">.+?Личи">(\d+?)</.+?data-ts_text="(\d+?)">',
+    r'<a\sdata-topic_id="(?P<tor_id>\d+?)".+?">(?P<name>.+?)</a.+?tor-size"'
+    r'\sdata-ts_text="(?P<size>\d+?)">.+?data-ts_text="(?P<seeds>[-\d]+?)">.+?'
+    r'Личи">(?P<leech>\d+?)</.+?data-ts_text="(?P<pub_date>\d+?)">',
     re.S
 )
 RE_RESULTS = re.compile(r"Результатов\sпоиска:\s(\d{1,3})\s<span", re.S)
@@ -72,11 +73,11 @@ ICON = ("AAABAAEAEBAAAAEAIABoBAAAFgAAACgAAAAQAAAAIAAAAAEAIAAAAAAAAAAAABMLAAATCw"
 
 # setup logging
 logging.basicConfig(
+    filemode="w",
+    filename=FILE_L,
     format="%(asctime)s %(name)-12s %(levelname)-8s %(message)s",
     datefmt="%m-%d %H:%M",
     level=logging.DEBUG,
-    filemode="w",
-    filename=FILE_L,
 )
 
 logger = logging.getLogger(__name__)
@@ -191,6 +192,7 @@ class Rutracker:
             try:
                 torrents_found = int(RE_RESULTS.search(page)[1])
             except TypeError:
+                logger.debug(f"Unexpected page content:\n {page}")
                 raise EngineError("Unexpected page content")
             if torrents_found <= 0:
                 return 0
@@ -199,16 +201,20 @@ class Rutracker:
         return torrents_found
 
     def draw(self, html: str) -> None:
-        for tor in RE_TORRENTS.findall(html):
+        for tor in RE_TORRENTS.finditer(html):
             prettyPrinter({
+                "link": self.url_dl + tor.group("tor_id"),
+                "name": unescape(tor.group("name")),
+                "size": tor.group("size"),
+                "seeds": max(0, int(tor.group("seeds"))),
+                "leech": int(tor.group("leech")),
                 "engine_url": self.url,
-                "desc_link": self.url + "viewtopic.php?t=" + tor[0],
-                "name": str(unescape(tor[1])),
-                "link": self.url_dl + tor[0],
-                "size": tor[2],
-                "seeds": max(0, int(tor[3])),
-                "leech": tor[4],
-                "pub_date": int(time.mktime(time.localtime(int(tor[5]))))
+                "desc_link": (
+                        self.url + "viewtopic.php?t=" + tor.group("tor_id")
+                ),
+                "pub_date": int(time.mktime(time.localtime(int(
+                    tor.group("pub_date")
+                )))),
             })
 
     def _catch_errors(self, handler: Callable, *args: str):

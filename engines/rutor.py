@@ -1,4 +1,4 @@
-# VERSION: 1.11
+# VERSION: 1.13
 # AUTHORS: imDMG [imdmgg@gmail.com]
 
 # Rutor.org search engine plugin for qBittorrent
@@ -32,13 +32,15 @@ FILE = Path(__file__)
 BASEDIR = FILE.parent.absolute()
 
 FILENAME = FILE.stem
-FILE_J, FILE_C = [BASEDIR / (FILENAME + fl) for fl in (".json", ".cookie")]
-
+FILE_J, FILE_C, FILE_L = [BASEDIR / (FILENAME + fl)
+                          for fl in (".json", ".cookie", ".log")]
 
 RE_TORRENTS = re.compile(
-    r'(?:gai|tum)"><td>(.+?)</td.+?href="(magnet:.+?)".+?href="/'
-    r'(torrent/(\d+).+?)">(.+?)</a.+?right">([.\d]+?&nbsp;\w+?)</td.+?alt="S"\s'
-    r'/>(.+?)</s.+?red">(.+?)</s', re.S
+    r'(?:gai|tum)"><td>(?P<pub_date>.+?)</td.+?href="(?P<mag_link>magnet:'
+    r'.+?)".+?href="/(?P<desc_link>torrent/(?P<tor_id>\d+).+?)">(?P<name>.+?)'
+    r'</a.+?right">(?P<size>[.\d]+?&nbsp;\w+?)</td.+?<span.+?(?P<seeds>\d+?)'
+    r'</span>.+?<span.+?(?P<leech>\d+?)</span>',
+    re.S
 )
 RE_RESULTS = re.compile(r"</b>\sРезультатов\sпоиска\s(\d{1,4})\s", re.S)
 PATTERNS = ("%ssearch/%i/%i/000/0/%s",)
@@ -67,9 +69,11 @@ ICON = ("AAABAAEAEBAAAAEAGABoAwAAFgAAACgAAAAQAAAAIAAAAAEAGAAAAAAAAAAAAAAAAAAAAA"
 
 # setup logging
 logging.basicConfig(
+    filemode="w",
+    filename=FILE_L,
     format="%(asctime)s %(name)-12s %(levelname)-8s %(message)s",
     datefmt="%m-%d %H:%M",
-    level=logging.DEBUG
+    level=logging.DEBUG,
 )
 
 logger = logging.getLogger(__name__)
@@ -83,7 +87,7 @@ def date_normalize(date_str: str) -> int:
     # replace names month
     months = ("Янв", "Фев", "Мар", "Апр", "Май", "Июн",
               "Июл", "Авг", "Сен", "Окт", "Ноя", "Дек")
-    date_str = [unescape(date_str.replace(m, f"{i:02d}"))
+    date_str = [date_str.replace(m, f"{i:02d}")
           for i, m in enumerate(months, 1) if m in date_str][0]
     return int(time.mktime(time.strptime(date_str, "%d %m %y")))
 
@@ -144,7 +148,7 @@ config = Config()
 
 class Rutor:
     name = "Rutor"
-    url = "http://rutor.info/"
+    url = "https://rutor.info/"
     url_dl = url.replace("//", "//d.") + "download/"
     supported_categories = {"all": 0,
                             "movies": 1,
@@ -168,10 +172,11 @@ class Rutor:
     def searching(self, query: str, first: bool = False) -> int:
         page, torrents_found = self._request(query).decode(), -1
         if first:
-            # firstly we check if there is a result
+            # firstly, we check if there is a result
             try:
                 torrents_found = int(RE_RESULTS.search(page)[1])
             except TypeError:
+                logger.debug(f"Unexpected page content:\n {page}")
                 raise EngineError("Unexpected page content")
             if torrents_found <= 0:
                 return 0
@@ -180,16 +185,17 @@ class Rutor:
         return torrents_found
 
     def draw(self, html: str) -> None:
-        for tor in RE_TORRENTS.findall(html):
+        for tor in RE_TORRENTS.finditer(html):
             prettyPrinter({
+                "link": (tor.group("mag_link") if config.magnet else
+                         self.url_dl + tor.group("tor_id")),
+                "name": unescape(tor.group("name")),
+                "size": unescape(tor.group("size")),
+                "seeds": int(tor.group("seeds")),
+                "leech": int(tor.group("leech")),
                 "engine_url": self.url,
-                "desc_link": self.url + tor[2],
-                "name": str(unescape(tor[4])),
-                "link": tor[1] if config.magnet else self.url_dl + tor[3],
-                "size": str(unescape(tor[5].replace("&nbsp;", " "))),
-                "seeds": int(unescape(tor[6])),
-                "leech": int(unescape(tor[7])),
-                "pub_date": date_normalize(tor[0])
+                "desc_link": self.url + tor.group("desc_link"),
+                "pub_date": date_normalize(unescape(tor.group("pub_date"))),
             })
 
     def _catch_errors(self, handler: Callable, *args: str):
@@ -197,6 +203,7 @@ class Rutor:
             self._init()
             handler(*args)
         except EngineError as ex:
+            logger.exception(ex)
             self.pretty_error(args[0], str(ex))
         except Exception as ex:
             self.pretty_error(args[0], "Unexpected error, please check logs")
@@ -282,7 +289,7 @@ class Rutor:
     def pretty_error(self, what: str, error: str) -> None:
         prettyPrinter({
             "engine_url": self.url,
-            "desc_link": "https://github.com/imDMG/qBt_SE",
+            "desc_link": f"file://{FILE_L}",
             "name": f"[{unquote(what)}][Error]: {error}",
             "link": self.url + "error",
             "size": "1 TB",  # lol

@@ -1,4 +1,4 @@
-# VERSION: 2.16
+# VERSION: 2.18
 # AUTHORS: imDMG [imdmgg@gmail.com]
 
 # NoNaMe-Club search engine plugin for qBittorrent
@@ -33,12 +33,14 @@ FILE = Path(__file__)
 BASEDIR = FILE.parent.absolute()
 
 FILENAME = FILE.stem
-FILE_J, FILE_C = [BASEDIR / (FILENAME + fl) for fl in (".json", ".cookie")]
+FILE_J, FILE_C, FILE_L = [BASEDIR / (FILENAME + fl)
+                          for fl in (".json", ".cookie", ".log")]
 
 
 RE_TORRENTS = re.compile(
-    r'topictitle"\shref="(.+?)"><b>(.+?)</b>.+?href="(d.+?)".+?<u>(\d+?)</u>.+?'
-    r'<b>(\d+?)</b>.+?<b>(\d+?)</b>.+?<u>(\d+?)</u>', re.S
+    r'topictitle"\shref="(?P<desc_link>.+?)"><b>(?P<name>.+?)</b>.+?'
+    r'href="(?P<link>d.+?)".+?<u>(?P<size>\d+?)</u>.+?<b>(?P<seeds>\d+?)'
+    r'</b>.+?<b>(?P<leech>\d+?)</b>.+?<u>(?P<pub_date>\d+?)</u>', re.S
 )
 RE_RESULTS = re.compile(r'TP_VER">(?:.+?:\s(\d{1,3}\s))?', re.S)
 # RE_CODE = re.compile(r'name="code"\svalue="(.+?)"', re.S)
@@ -72,11 +74,11 @@ ICON = ("AAABAAEAEBAAAAEAIABoBAAAFgAAACgAAAAQAAAAIAAAAAEAIAAAAAAAAAAAAAAAAAAAAA"
 
 # setup logging
 logging.basicConfig(
-    filename=f"{BASEDIR / FILENAME}.log",
     filemode="w",
+    filename=FILE_L,
     format="%(asctime)s %(name)-12s %(levelname)-8s %(message)s",
     datefmt="%m-%d %H:%M",
-    level=logging.DEBUG
+    level=logging.DEBUG,
 )
 
 logger = logging.getLogger(__name__)
@@ -191,7 +193,7 @@ class NNMClub:
                     f"Looks like we lost session id, lets login:\n {page}"
                 )
                 self.login()
-            # firstly we check if there is a result
+            # firstly, we check if there is a result
             try:
                 torrents_found = int(RE_RESULTS.search(page)[1] or 0)
             except TypeError:
@@ -204,16 +206,18 @@ class NNMClub:
         return torrents_found
 
     def draw(self, html: str) -> None:
-        for tor in RE_TORRENTS.findall(html):
+        for tor in RE_TORRENTS.finditer(html):
             prettyPrinter({
+                "link": self.url + tor.group("link"),
+                "name": unescape(tor.group("name")),
+                "size": tor.group("size"),
+                "seeds": int(tor.group("seeds")),
+                "leech": int(tor.group("leech")),
                 "engine_url": self.url,
-                "desc_link": self.url + tor[0],
-                "name": str(unescape(tor[1])),
-                "link": self.url + tor[2],
-                "size": tor[3],
-                "seeds": tor[4],
-                "leech": tor[5],
-                "pub_date": int(time.mktime(time.localtime(int(tor[6]))))
+                "desc_link": self.url + tor.group("desc_link"),
+                "pub_date": int(time.mktime(time.localtime(int(
+                    tor.group("pub_date")
+                )))),
             })
 
     def _catch_errors(self, handler: Callable, *args: str):
@@ -221,6 +225,7 @@ class NNMClub:
             self._init()
             handler(*args)
         except EngineError as ex:
+            logger.exception(ex)
             self.pretty_error(args[0], str(ex))
         except Exception as ex:
             self.pretty_error(args[0], "Unexpected error, please check logs")
@@ -322,7 +327,7 @@ class NNMClub:
     def pretty_error(self, what: str, error: str) -> None:
         prettyPrinter({
             "engine_url": self.url,
-            "desc_link": "https://github.com/imDMG/qBt_SE",
+            "desc_link": f"file://{FILE_L}",
             "name": f"[{unquote(what)}][Error]: {error}",
             "link": self.url + "error",
             "size": "1 TB",  # lol
