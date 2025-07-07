@@ -1,4 +1,4 @@
-# VERSION: 2.17
+# VERSION: 2.18
 # AUTHORS: imDMG [imdmgg@gmail.com]
 
 # Kinozal.tv search engine plugin for qBittorrent
@@ -17,7 +17,7 @@ from html import unescape
 from http.cookiejar import MozillaCookieJar
 from pathlib import Path
 from tempfile import NamedTemporaryFile
-from typing import Callable
+from typing import Callable, Optional
 from urllib.error import URLError, HTTPError
 from urllib.parse import urlencode, unquote, quote, urlparse
 from urllib.request import build_opener, HTTPCookieProcessor, ProxyHandler
@@ -188,7 +188,7 @@ class Kinozal:
         logger.debug(f"Login. Data before: {form_data}")
         # encoding to cp1251 then do default encode whole string
         data_encoded = urlencode(form_data, encoding="cp1251").encode()
-        logger.debug(f"Login. Data after: {data_encoded}")
+        logger.debug("Login. Data after: {data_encoded}")
 
         self._request(self.url_login, data_encoded)
         logger.debug(f"That we have: {[cookie for cookie in self.mcj]}")
@@ -210,11 +210,11 @@ class Kinozal:
                 logger.debug("Looks like we lost session id, lets login")
                 self.login()
             # firstly, we check if there is a result
-            try:
-                torrents_found = int(RE_RESULTS.search(page)[1])
-            except TypeError:
+            match = RE_RESULTS.search(page)
+            if match is None:
                 logger.debug(f"Unexpected page content:\n {page}")
                 raise EngineError("Unexpected page content")
+            torrents_found = int(match[1])
             if torrents_found <= 0:
                 return 0
         self.draw(page)
@@ -222,16 +222,16 @@ class Kinozal:
         return torrents_found
 
     def draw(self, html: str) -> None:
-        table = {"Т": "T", "Г": "G", "М": "M", "К": "K", "Б": "B"}
+        table = str.maketrans(
+            {"Т": "T", "Г": "G", "М": "M", "К": "K", "Б": "B"}
+        )
         for tor in RE_TORRENTS.finditer(html):
             prettyPrinter({
                 "link": "{}download.php?id={}".format(
                     self.url_dl, tor.group("desc_link").split("=")[-1]
                 ),
                 "name": unescape(tor.group("name")),
-                "size": tor.group("size").translate(
-                    tor.group("size").maketrans(table)
-                ),
+                "size": tor.group("size").translate(table),
                 "seeds": int(tor.group("seeds")),
                 "leech": int(tor.group("leech")),
                 "engine_url": self.url,
@@ -268,7 +268,7 @@ class Kinozal:
                     url.username,
                     url.password
                 )
-                socket.socket = socks.socksocket
+                socket.socket = socks.socksocket  # type: ignore
                 break
             else:
                 self.session.add_handler(ProxyHandler(config.proxies))
@@ -329,7 +329,10 @@ class Kinozal:
 
 
     def _request(
-            self, url: str, data: bytes = None, repeated: bool = False
+        self,
+        url: str,
+        data: Optional[bytes] = None,
+        repeated: bool = False,
     ) -> bytes:
         try:
             with self.session.open(url, data, 5) as r:

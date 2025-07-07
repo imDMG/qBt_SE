@@ -1,4 +1,4 @@
-# VERSION: 1.14
+# VERSION: 1.15
 # AUTHORS: imDMG [imdmgg@gmail.com]
 
 # rutracker.org search engine plugin for qBittorrent
@@ -16,7 +16,7 @@ from html import unescape
 from http.cookiejar import MozillaCookieJar
 from pathlib import Path
 from tempfile import NamedTemporaryFile
-from typing import Callable
+from typing import Callable, Optional
 from urllib.error import URLError, HTTPError
 from urllib.parse import urlencode, unquote, quote, urlparse
 from urllib.request import build_opener, HTTPCookieProcessor, ProxyHandler
@@ -167,7 +167,7 @@ class Rutracker:
         logger.debug(f"Login. Data before: {form_data}")
         # encoding to cp1251 then do default encode whole string
         data_encoded = urlencode(form_data, encoding="cp1251").encode()
-        logger.debug(f"Login. Data after: {data_encoded}")
+        logger.debug(f"Login. Data after: {data_encoded!r}")
         self._request(self.url_login, data_encoded)
         logger.debug(f"That we have: {[cookie for cookie in self.mcj]}")
         if "bb_session" not in [cookie.name for cookie in self.mcj]:
@@ -189,11 +189,11 @@ class Rutracker:
                 # retry request because guests cant search
                 page = self._request(query).decode("cp1251")
             # firstly, we check if there is a result
-            try:
-                torrents_found = int(RE_RESULTS.search(page)[1])
-            except TypeError:
+            match = RE_RESULTS.search(page)
+            if match is None:
                 logger.debug(f"Unexpected page content:\n {page}")
                 raise EngineError("Unexpected page content")
+            torrents_found = int(match[1])
             if torrents_found <= 0:
                 return 0
         self.draw(page)
@@ -246,7 +246,7 @@ class Rutracker:
                     url.username,
                     url.password
                 )
-                socket.socket = socks.socksocket
+                socket.socket = socks.socksocket  # type: ignore
                 break
             else:
                 self.session.add_handler(ProxyHandler(config.proxies))
@@ -294,7 +294,10 @@ class Rutracker:
             print(fd.name + " " + url)
 
     def _request(
-            self, url: str, data: bytes = None, repeated: bool = False
+        self,
+        url: str,
+        data: Optional[bytes] = None,
+        repeated: bool = False,
     ) -> bytes:
         try:
             with self.session.open(url, data, 5) as r:

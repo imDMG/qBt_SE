@@ -1,19 +1,19 @@
 [![Python 3.7+](https://img.shields.io/badge/python-%3E%3D%20v3.7-blue)](https://www.python.org/downloads/release/python-370/)
 # qBittorrent plugins
 
-## Rutracker.org ![v1.14](https://img.shields.io/badge/v1.14-blue)
+## Rutracker.org ![v1.15](https://img.shields.io/badge/v1.15-blue)
 Biggest russian torrent tracker.
 
-## Rutor.org ![v1.13](https://img.shields.io/badge/v1.13-blue)
+## Rutor.org ![v1.14](https://img.shields.io/badge/v1.14-blue)
 Popular free russian torrent tracker. http://rutor.info/ and http://rutor.is/ - actual domains at this time.
 
-## Kinozal.tv ![v2.17](https://img.shields.io/badge/v2.17-blue)
+## Kinozal.tv ![v2.18](https://img.shields.io/badge/v2.18-blue)
 Russian torrent tracker mostly directed on movies, but have other categories.
 
 The site has a restriction on downloading torrent files (10 by default or so), so I added the ability to open the magnet link instead the file.
 You can turn off the magnet link: in `kinozal.json` switch `"magnet": true` to `"magnet": false`
 
-## NNM-Club.me ![v2.18](https://img.shields.io/badge/v2.18-blue)
+## NNM-Club.me ![v2.19](https://img.shields.io/badge/v2.19-blue)
 One of biggest russian torrent tracker.
 
 _Note: the tracker is very sensitive to your proxy, if something doesn’t suit it, it turns on ddos protection and return 403 error. Use `proxychecker.py` to check your proxy_

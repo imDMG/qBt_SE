@@ -2,6 +2,11 @@
 /engines/nnmclub.*
 /engines/rutor.*
 /engines/rutracker.*
-/modules
 /tests
 /proxylist.txt
+/helpers.py
+/nova2.py
+/nova2dl.py
+/novaprinter.py
+/socks.py
+/sgmllib3.py

@@ -1,4 +1,4 @@
-# VERSION: 2.18
+# VERSION: 2.19
 # AUTHORS: imDMG [imdmgg@gmail.com]
 
 # NoNaMe-Club search engine plugin for qBittorrent
@@ -16,7 +16,7 @@ from html import unescape
 from http.cookiejar import Cookie, MozillaCookieJar
 from pathlib import Path
 from tempfile import NamedTemporaryFile
-from typing import Callable
+from typing import Callable, Optional
 from urllib.error import URLError, HTTPError
 from urllib.parse import unquote, quote, urlparse
 from urllib.request import build_opener, HTTPCookieProcessor, ProxyHandler
@@ -194,11 +194,11 @@ class NNMClub:
                 )
                 self.login()
             # firstly, we check if there is a result
-            try:
-                torrents_found = int(RE_RESULTS.search(page)[1] or 0)
-            except TypeError:
+            match = RE_RESULTS.search(page)
+            if match is None:
                 logger.debug(f"Unexpected page content:\n {page}")
                 raise EngineError("Unexpected page content")
+            torrents_found = int(match[1])
             if torrents_found <= 0:
                 return 0
         self.draw(page)
@@ -249,7 +249,7 @@ class NNMClub:
                     url.username,
                     url.password
                 )
-                socket.socket = socks.socksocket
+                socket.socket = socks.socksocket  # type: ignore
                 break
             else:
                 self.session.add_handler(ProxyHandler(config.proxies))
@@ -300,7 +300,10 @@ class NNMClub:
             print(fd.name + " " + url)
 
     def _request(
-            self, url: str, data: bytes = None, repeated: bool = False
+        self,
+        url: str,
+        data: Optional[bytes] = None,
+        repeated: bool = False,
     ) -> bytes:
         try:
             with self.session.open(url, data, 5) as r:
