@@ -166,7 +166,7 @@ class Rutracker:
                      "login": "Вход"}
         logger.debug(f"Login. Data before: {form_data}")
         # encoding to cp1251 then do default encode whole string
-        data_encoded = urlencode(form_data, encoding="cp1251").encode()
+        data_encoded = urlencode(form_data, encoding="cp1251").encode("ascii")
         logger.debug(f"Login. Data after: {data_encoded!r}")
         self._request(self.url_login, data_encoded)
         logger.debug(f"That we have: {[cookie for cookie in self.mcj]}")
@@ -253,7 +253,10 @@ class Rutracker:
             logger.debug("Proxy is set!")
 
         # change user-agent
-        self.session.addheaders = [("User-Agent", config.ua)]
+        self.session.addheaders = [
+            ("User-Agent", config.ua),
+            ("Content-Type", "application/x-www-form-urlencoded; charset=cp1251")
+        ]
 
         # load local cookies
         try:
