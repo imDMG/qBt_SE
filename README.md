@@ -4,7 +4,7 @@
 ## Rutracker.org ![v1.15](https://img.shields.io/badge/v1.15-blue)
 Biggest russian torrent tracker.
 
-## Rutor.org ![v1.14](https://img.shields.io/badge/v1.14-blue)
+## Rutor.org ![v1.15](https://img.shields.io/badge/v1.15-blue)
 Popular free russian torrent tracker. http://rutor.info/ and http://rutor.is/ - actual domains at this time.
 
 ## Kinozal.tv ![v2.18](https://img.shields.io/badge/v2.18-blue)

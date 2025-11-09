@@ -1,4 +1,4 @@
-# VERSION: 1.14
+# VERSION: 1.15
 # AUTHORS: imDMG [imdmgg@gmail.com]
 
 # Rutor.org search engine plugin for qBittorrent
@@ -15,10 +15,10 @@ from dataclasses import dataclass, field
 from html import unescape
 from pathlib import Path
 from tempfile import NamedTemporaryFile
-from typing import Callable, Optional, cast, Any
-from urllib.error import URLError, HTTPError
-from urllib.parse import unquote, quote, urlparse
-from urllib.request import build_opener, ProxyHandler
+from typing import Any, Callable, Optional, cast
+from urllib.error import HTTPError, URLError
+from urllib.parse import quote, unquote, urlparse
+from urllib.request import ProxyHandler, build_opener
 
 import socks
 
@@ -190,7 +190,7 @@ class Rutor:
                 "link": (tor.group("mag_link") if config.magnet else
                          self.url_dl + tor.group("tor_id")),
                 "name": unescape(tor.group("name")),
-                "size": unescape(tor.group("size")),
+                "size": tor.group("size").replace("&nbsp;", " "),
                 "seeds": int(tor.group("seeds")),
                 "leech": int(tor.group("leech")),
                 "engine_url": self.url,
@@ -284,7 +284,7 @@ class Rutor:
                 return self._request(url, data, True)
             if "no host given" in error:
                 reason = "Proxy is bad, try another!"
-            elif hasattr(err, "code"):
+            elif isinstance(err, HTTPError):
                 reason = f"Request to {url} failed with status: {err.code}"
 
             raise EngineError(reason)
