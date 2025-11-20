@@ -1,4 +1,4 @@
-# VERSION: 2.18
+# VERSION: 2.19
 # AUTHORS: imDMG [imdmgg@gmail.com]
 
 # Kinozal.tv search engine plugin for qBittorrent
@@ -18,29 +18,31 @@ from http.cookiejar import MozillaCookieJar
 from pathlib import Path
 from tempfile import NamedTemporaryFile
 from typing import Callable, Optional
-from urllib.error import URLError, HTTPError
-from urllib.parse import urlencode, unquote, quote, urlparse
-from urllib.request import build_opener, HTTPCookieProcessor, ProxyHandler
-
-import socks
+from urllib.error import HTTPError, URLError
+from urllib.parse import quote, unquote, urlencode, urlparse
+from urllib.request import HTTPCookieProcessor, ProxyHandler, build_opener
 
 try:
+    import socks
     from novaprinter import prettyPrinter
 except ImportError:
     sys.path.insert(0, str(Path(__file__).parent.parent.absolute()))
+    import socks
     from novaprinter import prettyPrinter
 
 FILE = Path(__file__)
 BASEDIR = FILE.parent.absolute()
 
 FILENAME = FILE.stem
-FILE_J, FILE_C, FILE_L = [BASEDIR / (FILENAME + fl)
-                          for fl in (".json", ".cookie", ".log")]
+FILE_J, FILE_C, FILE_L = [
+    BASEDIR / (FILENAME + fl) for fl in (".json", ".cookie", ".log")
+]
 
 RE_TORRENTS = re.compile(
     r'nam"><a\s+?href="/(?P<desc_link>.+?)"\s+?class="r\d">(?P<name>.+?)'
-    r'</a>.+?s\'>.+?s\'>(?P<size>.+?)<.+?sl_s\'>(?P<seeds>\d+?)<.+?sl_p\''
-    r'>(?P<leech>\d+?)<.+?s\'>(?P<pub_date>.+?)</td>', re.S
+    r"</a>.+?s\'>.+?s\'>(?P<size>.+?)<.+?sl_s\'>(?P<seeds>\d+?)<.+?sl_p\'"
+    r">(?P<leech>\d+?)<.+?s\'>(?P<pub_date>.+?)</td>",
+    re.S,
 )
 RE_RESULTS = re.compile(r"</span>Найдено\s+?(\d+?)\s+?раздач", re.S)
 PATTERNS = ("%sbrowse.php?s=%s&c=%s", "%s&page=%s")
@@ -48,28 +50,30 @@ PATTERNS = ("%sbrowse.php?s=%s&c=%s", "%s&page=%s")
 PAGES = 50
 
 # base64 encoded image
-ICON = ("AAABAAEAEBAAAAEAIABoBAAAFgAAACgAAAAQAAAAIAAAAAEAIAAAAAAAQAQAAAAAAAAAAA"
-        "AAAAAAAAAAAACARztMgEc7/4BHO/+ARztMAAAAAIBHO0yhd2n/gEc7/6F3af+ARztMAAAA"
-        "AIBHO0yARzv/gEc7/4BHO0wAAAAAgEc7/7iYiv/O4+r/pH5x/4FIPP+kfnH/zsrE/87j6v"
-        "/OycL/pYB1/4BHO/+jfHD/ztbV/7+yrP+ARzv/AAAAAIBHO//O4+r/zu/9/87v/f/O7/3/"
-        "zu/9/87v/f/O7/3/zu/9/87v/f/O7/3/zu/9/87v/f/O1dT/gEc7/wAAAACARztMpYB1/8"
-        "7v/f8IC5X/CAuV/wgLlf8IC5X/zu/9/77h+v9vgcv/SFSy/wAAif97j87/oXdp/4BHO0wA"
-        "AAAAAAAAAIBHO//O7/3/gabq/w4Tnv8OE57/gabq/87v/f96muj/DBCd/wAAif83SMf/zu"
-        "/9/4BHO/8AAAAAAAAAAIBHO0ynhXv/zu/9/87v/f8OE57/CAuV/87v/f+63vn/Hyqx/wAA"
-        "if9KXMX/zO38/87v/f+mhHn/gEc7TAAAAAChd2n/1eHk/87v/f/O7/3/DhOe/wgLlf9nhu"
-        "T/MEPF/wAAif82ScT/utjy/87v/f/O7/3/zsrD/6F3af8AAAAAgEc7/9Pk6v/O7/3/zu/9"
-        "/xQcqP8IC5X/FBqo/xUYlf9of9v/zu/9/87v/f/O7/3/zu/9/87d4f+ARzv/AAAAAIBHO/"
-        "/Y19X/zu/9/87v/f8RGaT/CAuV/wAAif90h8v/zu/9/87v/f/O7/3/zu/9/87v/f/OycL/"
-        "gEc7/wAAAAChd2n/up6S/87v/f/O7/3/ERmk/wgLlf9DXdj/CQ6Z/zdAqf/O7/3/zu/9/8"
-        "7v/f/O7/3/upyQ/6F3af8AAAAAgEc7TIJLQP/P7/3/zu/9/xQcqP8IC5X/zu/9/46l2f8j"
-        "NMD/gJXS/87v/f/O7/3/zu/9/45kXf+ARztMAAAAAAAAAACARzv/0e35/5Go2/8UHKj/CA"
-        "uV/5Go2//O7/3/XHDY/w4Tn/8YHJf/QEms/9Dr9v+ARzv/AAAAAAAAAACARztMu6KY/9Hu"
-        "+v8IC5X/CAuV/wgLlf8IC5X/zu/9/87v/f9OZtz/FB2q/y08wv/Q6/b/oXdp/4BHO0wAAA"
-        "AAgEc7/9/s8P/R7fn/0e77/9Hu+//O7/3/zu/9/87v/f/O7/3/z+/9/9Dt+P/Q7Pf/3u3t"
-        "/87n8P+ARzv/AAAAAIBHO//Sz8j/3+zw/7qhlf+IWE//o31w/9jZ2P/a7fH/2NfV/7ylm/"
-        "+GVEr/qYyD/87o8f/R2dj/gEc7/wAAAACARztMgEc7/4BHO/+ARztMAAAAAIBHO0yARzv/"
-        "gEc7/4BHO/+ARztMAAAAAIBHO0yARzv/gEc7/4BHO0wAAAAACCEAAAABAAAAAQAAAAEAAI"
-        "ADAAAAAQAAAAEAAAABAAAAAQAAAAEAAAABAACAAwAAAAEAAAABAAAAAQAACCEAAA== ")
+ICON = (
+    "AAABAAEAEBAAAAEAIABoBAAAFgAAACgAAAAQAAAAIAAAAAEAIAAAAAAAQAQAAAAAAAAAAAAAA"
+    "AAAAAAAAACARztMgEc7/4BHO/+ARztMAAAAAIBHO0yhd2n/gEc7/6F3af+ARztMAAAAAIBHO0"
+    "yARzv/gEc7/4BHO0wAAAAAgEc7/7iYiv/O4+r/pH5x/4FIPP+kfnH/zsrE/87j6v/OycL/pYB"
+    "1/4BHO/+jfHD/ztbV/7+yrP+ARzv/AAAAAIBHO//O4+r/zu/9/87v/f/O7/3/zu/9/87v/f/O"
+    "7/3/zu/9/87v/f/O7/3/zu/9/87v/f/O1dT/gEc7/wAAAACARztMpYB1/87v/f8IC5X/CAuV/"
+    "wgLlf8IC5X/zu/9/77h+v9vgcv/SFSy/wAAif97j87/oXdp/4BHO0wAAAAAAAAAAIBHO//O7/"
+    "3/gabq/w4Tnv8OE57/gabq/87v/f96muj/DBCd/wAAif83SMf/zu/9/4BHO/8AAAAAAAAAAIB"
+    "HO0ynhXv/zu/9/87v/f8OE57/CAuV/87v/f+63vn/Hyqx/wAAif9KXMX/zO38/87v/f+mhHn/"
+    "gEc7TAAAAAChd2n/1eHk/87v/f/O7/3/DhOe/wgLlf9nhuT/MEPF/wAAif82ScT/utjy/87v/"
+    "f/O7/3/zsrD/6F3af8AAAAAgEc7/9Pk6v/O7/3/zu/9/xQcqP8IC5X/FBqo/xUYlf9of9v/zu"
+    "/9/87v/f/O7/3/zu/9/87d4f+ARzv/AAAAAIBHO//Y19X/zu/9/87v/f8RGaT/CAuV/wAAif9"
+    "0h8v/zu/9/87v/f/O7/3/zu/9/87v/f/OycL/gEc7/wAAAAChd2n/up6S/87v/f/O7/3/ERmk"
+    "/wgLlf9DXdj/CQ6Z/zdAqf/O7/3/zu/9/87v/f/O7/3/upyQ/6F3af8AAAAAgEc7TIJLQP/P7"
+    "/3/zu/9/xQcqP8IC5X/zu/9/46l2f8jNMD/gJXS/87v/f/O7/3/zu/9/45kXf+ARztMAAAAAA"
+    "AAAACARzv/0e35/5Go2/8UHKj/CAuV/5Go2//O7/3/XHDY/w4Tn/8YHJf/QEms/9Dr9v+ARzv"
+    "/AAAAAAAAAACARztMu6KY/9Hu+v8IC5X/CAuV/wgLlf8IC5X/zu/9/87v/f9OZtz/FB2q/y08"
+    "wv/Q6/b/oXdp/4BHO0wAAAAAgEc7/9/s8P/R7fn/0e77/9Hu+//O7/3/zu/9/87v/f/O7/3/z"
+    "+/9/9Dt+P/Q7Pf/3u3t/87n8P+ARzv/AAAAAIBHO//Sz8j/3+zw/7qhlf+IWE//o31w/9jZ2P"
+    "/a7fH/2NfV/7ylm/+GVEr/qYyD/87o8f/R2dj/gEc7/wAAAACARztMgEc7/4BHO/+ARztMAAA"
+    "AAIBHO0yARzv/gEc7/4BHO/+ARztMAAAAAIBHO0yARzv/gEc7/4BHO0wAAAAACCEAAAABAAAA"
+    "AQAAAAEAAIADAAAAAQAAAAEAAAABAAAAAQAAAAEAAAABAACAAwAAAAEAAAABAAAAAQAACCEAA"
+    "A=="
+)
 
 # setup logging
 logging.basicConfig(
@@ -98,13 +102,12 @@ def date_normalize(date_str: str) -> int:
         pub_date = time.strftime(
             "%d.%m.%Y", time.localtime(time.time() - 86400)
         )
-    return int(time.mktime(time.strptime(
-        f"{pub_date} {pub_time}", "%d.%m.%Y %H:%M"
-    )))
+    return int(
+        time.mktime(time.strptime(f"{pub_date} {pub_time}", "%d.%m.%Y %H:%M"))
+    )
 
 
-class EngineError(Exception):
-    ...
+class EngineError(Exception): ...
 
 
 @dataclass
@@ -115,8 +118,9 @@ class Config:
     proxy: bool = False
     # dynamic_proxy: bool = True
     proxies: dict = field(default_factory=lambda: {"http": "", "https": ""})
-    ua: str = ("Mozilla/5.0 (X11; Linux i686; rv:38.0) Gecko/20100101 "
-               "Firefox/38.0 ")
+    ua: str = (
+        "Mozilla/5.0 (X11; Linux i686; rv:38.0) Gecko/20100101 Firefox/38.0 "
+    )
 
     def __post_init__(self):
         try:
@@ -150,8 +154,9 @@ class Config:
 
     @staticmethod
     def _to_camel(s: str) -> str:
-        return "".join(x.title() if i else x
-                       for i, x in enumerate(s.split("_")))
+        return "".join(
+            x.title() if i else x for i, x in enumerate(s.split("_"))
+        )
 
 
 config = Config()
@@ -162,13 +167,15 @@ class Kinozal:
     url = "https://kinozal.tv/"
     url_dl = url.replace("//", "//dl.")
     url_login = url + "takelogin.php"
-    supported_categories = {"all": "0",
-                            "movies": "1002",
-                            "tv": "1001",
-                            "music": "1004",
-                            "games": "23",
-                            "anime": "20",
-                            "software": "32"}
+    supported_categories = {
+        "all": "0",
+        "movies": "1002",
+        "tv": "1001",
+        "music": "1004",
+        "games": "23",
+        "anime": "20",
+        "software": "32",
+    }
 
     # cookies
     mcj = MozillaCookieJar()
@@ -226,18 +233,20 @@ class Kinozal:
             {"Т": "T", "Г": "G", "М": "M", "К": "K", "Б": "B"}
         )
         for tor in RE_TORRENTS.finditer(html):
-            prettyPrinter({
-                "link": "{}download.php?id={}".format(
-                    self.url_dl, tor.group("desc_link").split("=")[-1]
-                ),
-                "name": unescape(tor.group("name")),
-                "size": tor.group("size").translate(table),
-                "seeds": int(tor.group("seeds")),
-                "leech": int(tor.group("leech")),
-                "engine_url": self.url,
-                "desc_link": self.url + tor.group("desc_link"),
-                "pub_date": date_normalize(tor.group("pub_date")),
-            })
+            prettyPrinter(
+                {
+                    "link": "{}download.php?id={}".format(
+                        self.url_dl, tor.group("desc_link").split("=")[-1]
+                    ),
+                    "name": unescape(tor.group("name")),
+                    "size": tor.group("size").translate(table),
+                    "seeds": int(tor.group("seeds")),
+                    "leech": int(tor.group("leech")),
+                    "engine_url": self.url,
+                    "desc_link": self.url + tor.group("desc_link"),
+                    "pub_date": date_normalize(tor.group("pub_date")),
+                }
+            )
 
     def _catch_errors(self, handler: Callable, *args: str):
         try:
@@ -266,7 +275,7 @@ class Kinozal:
                     url.port,
                     True,
                     url.username,
-                    url.password
+                    url.password,
                 )
                 socket.socket = socks.socksocket  # type: ignore
                 break
@@ -290,8 +299,11 @@ class Kinozal:
         self.login()
 
     def _search(self, what: str, cat: str = "all") -> None:
-        query = PATTERNS[0] % (self.url, quote(unquote(what)),
-                               self.supported_categories[cat])
+        query = PATTERNS[0] % (
+            self.url,
+            quote(unquote(what)),
+            self.supported_categories[cat],
+        )
 
         # make first request (maybe it enough)
         t0, total = time.time(), self.searching(query, True)
@@ -307,8 +319,10 @@ class Kinozal:
     def _download_torrent(self, url: str) -> None:
         # choose download method
         if config.magnet:
-            url = "%sget_srv_details.php?action=2&id=%s" % (self.url,
-                                                            url.split("=")[1])
+            url = "%sget_srv_details.php?action=2&id=%s" % (
+                self.url,
+                url.split("=")[1],
+            )
 
         path = self._get_download_path(self._request(url))
 
@@ -326,7 +340,6 @@ class Kinozal:
         with NamedTemporaryFile(suffix=".torrent", delete=False) as fd:
             fd.write(response)
             return fd.name
-
 
     def _request(
         self,
@@ -348,22 +361,24 @@ class Kinozal:
                 return self._request(url, data, True)
             if "no host given" in error:
                 reason = "Proxy is bad, try another!"
-            elif hasattr(err, "code"):
+            elif isinstance(err, HTTPError):
                 reason = f"Request to {url} failed with status: {err.code}"
 
             raise EngineError(reason)
 
     def pretty_error(self, what: str, error: str) -> None:
-        prettyPrinter({
-            "engine_url": self.url,
-            "desc_link": f"file://{FILE_L}",
-            "name": f"[{unquote(what)}][Error]: {error}",
-            "link": self.url + "error",
-            "size": "1 TB",  # lol
-            "seeds": 100,
-            "leech": 100,
-            "pub_date": int(time.time())
-        })
+        prettyPrinter(
+            {
+                "engine_url": self.url,
+                "desc_link": f"file://{FILE_L}",
+                "name": f"[{unquote(what)}][Error]: {error}",
+                "link": self.url + "error",
+                "size": "1 TB",  # lol
+                "seeds": 100,
+                "leech": 100,
+                "pub_date": int(time.time()),
+            }
+        )
 
 
 # pep8

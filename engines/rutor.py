@@ -1,4 +1,4 @@
-# VERSION: 1.15
+# VERSION: 1.16
 # AUTHORS: imDMG [imdmgg@gmail.com]
 
 # Rutor.org search engine plugin for qBittorrent
@@ -20,27 +20,28 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import quote, unquote, urlparse
 from urllib.request import ProxyHandler, build_opener
 
-import socks
-
 try:
+    import socks
     from novaprinter import prettyPrinter
 except ImportError:
     sys.path.insert(0, str(Path(__file__).parent.parent.absolute()))
+    import socks
     from novaprinter import prettyPrinter
 
 FILE = Path(__file__)
 BASEDIR = FILE.parent.absolute()
 
 FILENAME = FILE.stem
-FILE_J, FILE_C, FILE_L = [BASEDIR / (FILENAME + fl)
-                          for fl in (".json", ".cookie", ".log")]
+FILE_J, FILE_C, FILE_L = [
+    BASEDIR / (FILENAME + fl) for fl in (".json", ".cookie", ".log")
+]
 
 RE_TORRENTS = re.compile(
     r'(?:gai|tum)"><td>(?P<pub_date>.+?)</td.+?href="(?P<mag_link>magnet:'
     r'.+?)".+?href="/(?P<desc_link>torrent/(?P<tor_id>\d+).+?)">(?P<name>.+?)'
     r'</a.+?right">(?P<size>[.\d]+?&nbsp;\w+?)</td.+?<span.+?(?P<seeds>\d+?)'
-    r'</span>.+?<span.+?(?P<leech>\d+?)</span>',
-    re.S
+    r"</span>.+?<span.+?(?P<leech>\d+?)</span>",
+    re.S,
 )
 RE_RESULTS = re.compile(r"</b>\sРезультатов\sпоиска\s(\d{1,4})\s", re.S)
 PATTERNS = ("%ssearch/%i/%i/000/0/%s",)
@@ -48,24 +49,25 @@ PATTERNS = ("%ssearch/%i/%i/000/0/%s",)
 PAGES = 100
 
 # base64 encoded image
-ICON = ("AAABAAEAEBAAAAEAGABoAwAAFgAAACgAAAAQAAAAIAAAAAEAGAAAAAAAAAAAAAAAAAAAAA"
-        "AAAAAAAAAAAAAAAc4AAMwHNdcQ4vsN3fYS2fUY3fUe3fMj4fkk4fco4PYo5fgk7f5gp8Zu"
-        "ZZtsa59FIXZEGm4kh74PyeoLGp8NHK4PHrwQHr8VIb8XJL4bJrUcKJ8optEdtPMBGcQAIc"
-        "XeZAPVYwdA3MQFf8EDAJoFAMEEAM0AANIAAM4AAM0EAL8CAI8bXaEV1/cBHMsGDNTVWAOo"
-        "dTIU5/ELuOAJM6sEALsIAMoEALkCBbgFALUGAKshgMcvpNUTzOoFQNIFANqxQgBpkmgKue"
-        "8IT8UUy+8HO7MHPb8Gt+IG3vQHm9YKi84X4foKI7kRl+AWiMwSDYyxjXZAy84HdNYEALcP"
-        "guYM+vsL6PgGl/wBWN4K1/EF//8LbdQEALgEVc41zMp0YC+t0N0XxPcCIbwGAMkGGOUGUv"
-        "QKPPUEANsIU9ENvvAJw/ULnekGAr8FJcIUzfRycEZwzuMFnuYEArQCAdYDANYHAMQFAMwG"
-        "PcwM2vsHU/QKPegLwvYEEckFBrsOt/Y+kYky5/YGgNAGAKkHAc4JMssSoN0GTb0L2/gHYP"
-        "kCAPkFKOMP0fIHGc0EAKwLgNAq3OMd/P0Al9ACBqQCAMALbOMG+/8E8v0KjugBAO4CAPAG"
-        "Q9MNyPYEB8QBAKQCe8cW9//T+/09+/8Aqd8GIbIFAMAKbuUG6f8Ht/IFFeEAAMYPqeYMhO"
-        "EGB6oCgtUY5fuG0tv//vzs+PlQ9fwAw+4CLLoIALgJR+EFU+wEFcweZNAkquMFMrkArOor"
-        "4fSrxsvWx8n5/fv5+fn3+/iC8fsLzPIAUscEALMDAL8QPtAsetUFWsUHue1r7/vc6evOzM"
-        "fFx8n5/fvy+fj89vb/9/e+9/o44/oNi9kBD54CFKQJg9Qu4vu09vr/+ff89fTIz8rFx8n5"
-        "/fvy+fj59vb49vf/+fbh+vtk6vw1rN03suFn6vnl/f3/+fn49vj18/TIz8rFx8n5/fvy+f"
-        "j59vb39vf39/f//P3w+fme6/ak8Prv+fj//f369/r39vj18/TIz8rFx8ngBwAA4AMAAMAD"
-        "AADAAwAAwAMAAMABAACAAQAAgAEAAAAAAAAAAAAAgAEAAMADAADgBwAA+B8AAPw/AAD"
-        "+fwAA")
+ICON = (
+    "AAABAAEAEBAAAAEAGABoAwAAFgAAACgAAAAQAAAAIAAAAAEAGAAAAAAAAAAAAAAAAAAAAAAAA"
+    "AAAAAAAAAAAAc4AAMwHNdcQ4vsN3fYS2fUY3fUe3fMj4fkk4fco4PYo5fgk7f5gp8ZuZZtsa5"
+    "9FIXZEGm4kh74PyeoLGp8NHK4PHrwQHr8VIb8XJL4bJrUcKJ8optEdtPMBGcQAIcXeZAPVYwd"
+    "A3MQFf8EDAJoFAMEEAM0AANIAAM4AAM0EAL8CAI8bXaEV1/cBHMsGDNTVWAOodTIU5/ELuOAJ"
+    "M6sEALsIAMoEALkCBbgFALUGAKshgMcvpNUTzOoFQNIFANqxQgBpkmgKue8IT8UUy+8HO7MHP"
+    "b8Gt+IG3vQHm9YKi84X4foKI7kRl+AWiMwSDYyxjXZAy84HdNYEALcPguYM+vsL6PgGl/wBWN"
+    "4K1/EF//8LbdQEALgEVc41zMp0YC+t0N0XxPcCIbwGAMkGGOUGUvQKPPUEANsIU9ENvvAJw/U"
+    "LnekGAr8FJcIUzfRycEZwzuMFnuYEArQCAdYDANYHAMQFAMwGPcwM2vsHU/QKPegLwvYEEckF"
+    "BrsOt/Y+kYky5/YGgNAGAKkHAc4JMssSoN0GTb0L2/gHYPkCAPkFKOMP0fIHGc0EAKwLgNAq3"
+    "OMd/P0Al9ACBqQCAMALbOMG+/8E8v0KjugBAO4CAPAGQ9MNyPYEB8QBAKQCe8cW9//T+/09+/"
+    "8Aqd8GIbIFAMAKbuUG6f8Ht/IFFeEAAMYPqeYMhOEGB6oCgtUY5fuG0tv//vzs+PlQ9fwAw+4"
+    "CLLoIALgJR+EFU+wEFcweZNAkquMFMrkArOor4fSrxsvWx8n5/fv5+fn3+/iC8fsLzPIAUscE"
+    "ALMDAL8QPtAsetUFWsUHue1r7/vc6evOzMfFx8n5/fvy+fj89vb/9/e+9/o44/oNi9kBD54CF"
+    "KQJg9Qu4vu09vr/+ff89fTIz8rFx8n5/fvy+fj59vb49vf/+fbh+vtk6vw1rN03suFn6vnl/f"
+    "3/+fn49vj18/TIz8rFx8n5/fvy+fj59vb39vf39/f//P3w+fme6/ak8Prv+fj//f369/r39vj"
+    "18/TIz8rFx8ngBwAA4AMAAMADAADAAwAAwAMAAMABAACAAQAAgAEAAAAAAAAAAAAAgAEAAMAD"
+    "AADgBwAA+B8AAPw/AAD+fwAA"
+)
 
 # setup logging
 logging.basicConfig(
@@ -85,15 +87,29 @@ def rng(t: int) -> range:
 
 def date_normalize(date_str: str) -> int:
     # replace names month
-    months = ("Янв", "Фев", "Мар", "Апр", "Май", "Июн",
-              "Июл", "Авг", "Сен", "Окт", "Ноя", "Дек")
-    date_str = [date_str.replace(m, f"{i:02d}")
-          for i, m in enumerate(months, 1) if m in date_str][0]
+    months = (
+        "Янв",
+        "Фев",
+        "Мар",
+        "Апр",
+        "Май",
+        "Июн",
+        "Июл",
+        "Авг",
+        "Сен",
+        "Окт",
+        "Ноя",
+        "Дек",
+    )
+    date_str = [
+        date_str.replace(m, f"{i:02d}")
+        for i, m in enumerate(months, 1)
+        if m in date_str
+    ][0]
     return int(time.mktime(time.strptime(date_str, "%d %m %y")))
 
 
-class EngineError(Exception):
-    ...
+class EngineError(Exception): ...
 
 
 @dataclass
@@ -104,8 +120,9 @@ class Config:
     proxy: bool = False
     # dynamic_proxy: bool = True
     proxies: dict = field(default_factory=lambda: {"http": "", "https": ""})
-    ua: str = ("Mozilla/5.0 (X11; Linux i686; rv:38.0) Gecko/20100101 "
-               "Firefox/38.0 ")
+    ua: str = (
+        "Mozilla/5.0 (X11; Linux i686; rv:38.0) Gecko/20100101 Firefox/38.0 "
+    )
 
     def __post_init__(self):
         try:
@@ -139,8 +156,9 @@ class Config:
 
     @staticmethod
     def _to_camel(s: str) -> str:
-        return "".join(x.title() if i else x
-                       for i, x in enumerate(s.split("_")))
+        return "".join(
+            x.title() if i else x for i, x in enumerate(s.split("_"))
+        )
 
 
 config = Config()
@@ -150,15 +168,17 @@ class Rutor:
     name = "Rutor"
     url = "https://rutor.info/"
     url_dl = url.replace("//", "//d.") + "download/"
-    supported_categories = {"all": 0,
-                            "movies": 1,
-                            "tv": 6,
-                            "music": 2,
-                            "games": 8,
-                            "anime": 10,
-                            "software": 9,
-                            "pictures": 3,
-                            "books": 11}
+    supported_categories = {
+        "all": 0,
+        "movies": 1,
+        "tv": 6,
+        "music": 2,
+        "games": 8,
+        "anime": 10,
+        "software": 9,
+        "pictures": 3,
+        "books": 11,
+    }
 
     # establish connection
     session = build_opener()
@@ -186,17 +206,24 @@ class Rutor:
 
     def draw(self, html: str) -> None:
         for tor in RE_TORRENTS.finditer(html):
-            prettyPrinter({
-                "link": (tor.group("mag_link") if config.magnet else
-                         self.url_dl + tor.group("tor_id")),
-                "name": unescape(tor.group("name")),
-                "size": tor.group("size").replace("&nbsp;", " "),
-                "seeds": int(tor.group("seeds")),
-                "leech": int(tor.group("leech")),
-                "engine_url": self.url,
-                "desc_link": self.url + tor.group("desc_link"),
-                "pub_date": date_normalize(unescape(tor.group("pub_date"))),
-            })
+            prettyPrinter(
+                {
+                    "link": (
+                        tor.group("mag_link")
+                        if config.magnet
+                        else self.url_dl + tor.group("tor_id")
+                    ),
+                    "name": unescape(tor.group("name")),
+                    "size": tor.group("size").replace("&nbsp;", " "),
+                    "seeds": int(tor.group("seeds")),
+                    "leech": int(tor.group("leech")),
+                    "engine_url": self.url,
+                    "desc_link": self.url + tor.group("desc_link"),
+                    "pub_date": date_normalize(
+                        unescape(tor.group("pub_date"))
+                    ),
+                }
+            )
 
     def _catch_errors(self, handler: Callable, *args: str):
         try:
@@ -225,7 +252,7 @@ class Rutor:
                     url.port,
                     True,
                     url.username,
-                    url.password
+                    url.password,
                 )
                 socket.socket = cast(Any, socks.socksocket)
                 break
@@ -237,8 +264,12 @@ class Rutor:
         self.session.addheaders = [("User-Agent", config.ua)]
 
     def _search(self, what: str, cat: str = "all") -> None:
-        query = PATTERNS[0] % (self.url, 0, self.supported_categories[cat],
-                               quote(unquote(what)))
+        query = PATTERNS[0] % (
+            self.url,
+            0,
+            self.supported_categories[cat],
+            quote(unquote(what)),
+        )
 
         # make first request (maybe it enough)
         t0, total = time.time(), self.searching(query, True)
@@ -290,16 +321,18 @@ class Rutor:
             raise EngineError(reason)
 
     def pretty_error(self, what: str, error: str) -> None:
-        prettyPrinter({
-            "engine_url": self.url,
-            "desc_link": f"file://{FILE_L}",
-            "name": f"[{unquote(what)}][Error]: {error}",
-            "link": self.url + "error",
-            "size": "1 TB",  # lol
-            "seeds": 100,
-            "leech": 100,
-            "pub_date": int(time.time())
-        })
+        prettyPrinter(
+            {
+                "engine_url": self.url,
+                "desc_link": f"file://{FILE_L}",
+                "name": f"[{unquote(what)}][Error]: {error}",
+                "link": self.url + "error",
+                "size": "1 TB",  # lol
+                "seeds": 100,
+                "leech": 100,
+                "pub_date": int(time.time()),
+            }
+        )
 
 
 # pep8

@@ -1,7 +1,5 @@
-/engines/kinozal.*
-/engines/nnmclub.*
-/engines/rutor.*
-/engines/rutracker.*
+/engines/*.*
+!/engines/*.py
 /tests
 /proxylist.txt
 /helpers.py

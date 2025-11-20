@@ -1,4 +1,4 @@
-# VERSION: 2.19
+# VERSION: 2.20
 # AUTHORS: imDMG [imdmgg@gmail.com]
 
 # NoNaMe-Club search engine plugin for qBittorrent
@@ -17,30 +17,32 @@ from http.cookiejar import Cookie, MozillaCookieJar
 from pathlib import Path
 from tempfile import NamedTemporaryFile
 from typing import Callable, Optional
-from urllib.error import URLError, HTTPError
-from urllib.parse import unquote, quote, urlparse
-from urllib.request import build_opener, HTTPCookieProcessor, ProxyHandler
-
-import socks
+from urllib.error import HTTPError, URLError
+from urllib.parse import quote, unquote, urlparse
+from urllib.request import HTTPCookieProcessor, ProxyHandler, build_opener
 
 try:
+    import socks
     from novaprinter import prettyPrinter
 except ImportError:
     sys.path.insert(0, str(Path(__file__).parent.parent.absolute()))
+    import socks
     from novaprinter import prettyPrinter
 
 FILE = Path(__file__)
 BASEDIR = FILE.parent.absolute()
 
 FILENAME = FILE.stem
-FILE_J, FILE_C, FILE_L = [BASEDIR / (FILENAME + fl)
-                          for fl in (".json", ".cookie", ".log")]
+FILE_J, FILE_C, FILE_L = [
+    BASEDIR / (FILENAME + fl) for fl in (".json", ".cookie", ".log")
+]
 
 
 RE_TORRENTS = re.compile(
     r'topictitle"\shref="(?P<desc_link>.+?)"><b>(?P<name>.+?)</b>.+?'
     r'href="(?P<link>d.+?)".+?<u>(?P<size>\d+?)</u>.+?<b>(?P<seeds>\d+?)'
-    r'</b>.+?<b>(?P<leech>\d+?)</b>.+?<u>(?P<pub_date>\d+?)</u>', re.S
+    r"</b>.+?<b>(?P<leech>\d+?)</b>.+?<u>(?P<pub_date>\d+?)</u>",
+    re.S,
 )
 RE_RESULTS = re.compile(r'TP_VER">(?:.+?:\s(\d{1,3}\s))?', re.S)
 # RE_CODE = re.compile(r'name="code"\svalue="(.+?)"', re.S)
@@ -49,28 +51,30 @@ PATTERNS = ("%stracker.php?nm=%s&%s", "%s&start=%s")
 PAGES = 50
 
 # base64 encoded image
-ICON = ("AAABAAEAEBAAAAEAIABoBAAAFgAAACgAAAAQAAAAIAAAAAEAIAAAAAAAAAAAAAAAAAAAAA"
-        "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAaQicAXRQFADICAQAHAAAA"
-        "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAADz4QA8PizAP"
-        "u3XQDpjEIBtgkCABoAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
-        "BAIAEuyUAP3/8AD//akA//+hAP92SgCVAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAFA"
-        "AAAAAAAAAAAAAAAAEAADjLiQD8//wA//7RFP//+lX/WlsPlwAAAAMAAAAGAAAAAAAAAAAA"
-        "AAAAEAgAQqNBAP99HADfIAYAfgAAABQAAAAX21UC///4AP///Sj/+/Z//lZcMJOOjQCrqI"
-        "EAwQ4CADAAAAAAAAAAAGEXAM39oAD//7oA/9ucAP94GwDFVRkK6p0wAP//owD/+KoB/+FT"
-        "C///uQD//+wA//67AP6QUQC9DggAGAAAAACPNQDl964A//qqAv//3AD//8sB/39WAP85Aw"
-        "X/nxkA/5MQAP/sJQD/0T8A//Z9AP/6kwD/86AA/qJGALwTAABEtzcA5cshAP/jOAD//7wg"
-        "///+Dv/RUQH/AgEE8hcAAG40BgB3RAAAzlYCAPh0BAD/zh8A//+RAP//hQD/5B8A/xcAAE"
-        "x+HgDXz5oc/8yfPv//2g7/6VMA/AkEABQAAAAAAAAAAQAAAA4cCgBBOwkAg3EfAKyPfQDE"
-        "dkAAq0ELAGYAAAAABQMBQNldFf3/8w3///sA/7AoAPIAAAAAAAAAAAAAAAAAAAAAAAAAAA"
-        "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAchNAPLaLgD/+8AA//eOAP9qDAGpAAAAAAAAAAAA"
-        "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAFwLgCX0h8A//WiAP/+TQD/Kg"
-        "QAZAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAALQwAZqgR"
-        "APr0hwD/2VIA/QAAAAYAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
-        "AAAAAAAAoBACp6BAD/7H0A/3ZlALoAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
-        "AAAAAAAAAAAAAAAAAAAAAAARAQAx4zcA/93AAPQAAAAIAAAAAAAAAAAAAAAAAAAAAAAAAA"
-        "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAACgEASawXAPMTCgAnAAAAAAAAAAAAAAAA"
-        "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/D+sQfgfrEH4H6xBuAesQQ"
-        "ADrEEAAaxBAACsQQAArEEBAKxBg/+sQQP/rEED/6xBg/+sQYf/rEGH/6xBj/+sQQ==")
+ICON = (
+    "AAABAAEAEBAAAAEAIABoBAAAFgAAACgAAAAQAAAAIAAAAAEAIAAAAAAAAAAAAAAAAAAAAAAAA"
+    "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAaQicAXRQFADICAQAHAAAAAAAAAA"
+    "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAADz4QA8PizAPu3XQDpjEI"
+    "BtgkCABoAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABAIAEuyUAP3/"
+    "8AD//akA//+hAP92SgCVAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAFAAAAAAAAAAAAAAAA"
+    "AEAADjLiQD8//wA//7RFP//+lX/WlsPlwAAAAMAAAAGAAAAAAAAAAAAAAAAEAgAQqNBAP99HA"
+    "DfIAYAfgAAABQAAAAX21UC///4AP///Sj/+/Z//lZcMJOOjQCrqIEAwQ4CADAAAAAAAAAAAGE"
+    "XAM39oAD//7oA/9ucAP94GwDFVRkK6p0wAP//owD/+KoB/+FTC///uQD//+wA//67AP6QUQC9"
+    "DggAGAAAAACPNQDl964A//qqAv//3AD//8sB/39WAP85AwX/nxkA/5MQAP/sJQD/0T8A//Z9A"
+    "P/6kwD/86AA/qJGALwTAABEtzcA5cshAP/jOAD//7wg///+Dv/RUQH/AgEE8hcAAG40BgB3RA"
+    "AAzlYCAPh0BAD/zh8A//+RAP//hQD/5B8A/xcAAEx+HgDXz5oc/8yfPv//2g7/6VMA/AkEABQ"
+    "AAAAAAAAAAQAAAA4cCgBBOwkAg3EfAKyPfQDEdkAAq0ELAGYAAAAABQMBQNldFf3/8w3///sA"
+    "/7AoAPIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAchNAPLaL"
+    "gD/+8AA//eOAP9qDAGpAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+    "AAAAFwLgCX0h8A//WiAP/+TQD/KQAZAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+    "AAAAAAAAAAAAAAAALQwAZqgRAPr0hwD/2VIA/QAAAAYAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+    "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAoBACp6BAD/7H0A/3ZlALoAAAAAAAAAAAAAAAAAAAAAAA"
+    "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAARAQAx4zcA/93AAPQAAAAIAAAAAAAAAAA"
+    "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAACgEASawXAPMTCgAnAAAA"
+    "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/D+sQfgfrEH4H"
+    "6xBuAesQQADrEEAAaxBAACsQQAArEEBAKxBg/+sQQP/rEED/6xBg/+sQYf/rEGH/6xBj/+sQQ"
+    "=="
+)
 
 # setup logging
 logging.basicConfig(
@@ -88,8 +92,7 @@ def rng(t: int) -> range:
     return range(PAGES, -(-t // PAGES) * PAGES, PAGES)
 
 
-class EngineError(Exception):
-    ...
+class EngineError(Exception): ...
 
 
 @dataclass
@@ -100,8 +103,9 @@ class Config:
     proxy: bool = False
     # dynamic_proxy: bool = True
     proxies: dict = field(default_factory=lambda: {"http": "", "https": ""})
-    ua: str = ("Mozilla/5.0 (X11; Linux i686; rv:38.0) Gecko/20100101 "
-               "Firefox/38.0 ")
+    ua: str = (
+        "Mozilla/5.0 (X11; Linux i686; rv:38.0) Gecko/20100101 Firefox/38.0 "
+    )
 
     def __post_init__(self):
         try:
@@ -135,8 +139,9 @@ class Config:
 
     @staticmethod
     def _to_camel(s: str) -> str:
-        return "".join(x.title() if i else x
-                       for i, x in enumerate(s.split("_")))
+        return "".join(
+            x.title() if i else x for i, x in enumerate(s.split("_"))
+        )
 
 
 config = Config()
@@ -146,13 +151,15 @@ class NNMClub:
     name = "NoNaMe-Club"
     url = "https://nnmclub.to/forum/"
     url_dl = "https://nnm-club.ws/"
-    supported_categories = {"all": "-1",
-                            "movies": "14",
-                            "tv": "27",
-                            "music": "16",
-                            "games": "17",
-                            "anime": "24",
-                            "software": "21"}
+    supported_categories = {
+        "all": "-1",
+        "movies": "14",
+        "tv": "27",
+        "music": "16",
+        "games": "17",
+        "anime": "24",
+        "software": "21",
+    }
     # cookies
     mcj = MozillaCookieJar()
     # establish connection
@@ -170,10 +177,26 @@ class NNMClub:
             raise EngineError("Empty cookies in config file")
         for cookie in config.cookies.split("; "):
             name, value = cookie.split("=", 1)
-            self.mcj.set_cookie(Cookie(
-                0, name, value, None, False, "nnmclub.to", True, False,
-                "/", True, False, None, False, None, None, {}
-            ))
+            self.mcj.set_cookie(
+                Cookie(
+                    0,
+                    name,
+                    value,
+                    None,
+                    False,
+                    "nnmclub.to",
+                    True,
+                    False,
+                    "/",
+                    True,
+                    False,
+                    None,
+                    False,
+                    None,
+                    None,
+                    {},
+                )
+            )
 
         logger.debug(f"That we have: {[cookie for cookie in self.mcj]}")
         if "phpbb2mysql_4_sid" not in [cookie.name for cookie in self.mcj]:
@@ -184,8 +207,10 @@ class NNMClub:
         logger.info("We successfully authorized")
 
     def searching(self, query: str, first: bool = False) -> int:
-        page, torrents_found = self._request(query).decode("cp1251",
-                                                           "ignore"), -1
+        page, torrents_found = (
+            self._request(query).decode("cp1251", "ignore"),
+            -1,
+        )
         if first:
             # check login status
             if f"Выход [ {config.username} ]" not in page:
@@ -207,18 +232,18 @@ class NNMClub:
 
     def draw(self, html: str) -> None:
         for tor in RE_TORRENTS.finditer(html):
-            prettyPrinter({
-                "link": self.url + tor.group("link"),
-                "name": unescape(tor.group("name")),
-                "size": tor.group("size"),
-                "seeds": int(tor.group("seeds")),
-                "leech": int(tor.group("leech")),
-                "engine_url": self.url,
-                "desc_link": self.url + tor.group("desc_link"),
-                "pub_date": int(time.mktime(time.localtime(int(
-                    tor.group("pub_date")
-                )))),
-            })
+            prettyPrinter(
+                {
+                    "link": self.url + tor.group("link"),
+                    "name": unescape(tor.group("name")),
+                    "size": tor.group("size"),
+                    "seeds": int(tor.group("seeds")),
+                    "leech": int(tor.group("leech")),
+                    "engine_url": self.url,
+                    "desc_link": self.url + tor.group("desc_link"),
+                    "pub_date": int(tor.group("pub_date")),
+                }
+            )
 
     def _catch_errors(self, handler: Callable, *args: str):
         try:
@@ -247,7 +272,7 @@ class NNMClub:
                     url.port,
                     True,
                     url.username,
-                    url.password
+                    url.password,
                 )
                 socket.socket = socks.socksocket  # type: ignore
                 break
@@ -272,8 +297,11 @@ class NNMClub:
 
     def _search(self, what: str, cat: str = "all") -> None:
         c = self.supported_categories[cat]
-        query = PATTERNS[0] % (self.url, quote(unquote(what)),
-                               "f=-1" if c == "-1" else "c=" + c)
+        query = PATTERNS[0] % (
+            self.url,
+            quote(unquote(what)),
+            "f=-1" if c == "-1" else "c=" + c,
+        )
 
         # make first request (maybe it enough)
         t0, total = time.time(), self.searching(query, True)
@@ -322,22 +350,24 @@ class NNMClub:
                 reason = "Request timed out"
             if "no host given" in error:
                 reason = "Proxy is bad, try another!"
-            elif hasattr(err, "code"):
+            elif isinstance(err, HTTPError):
                 reason = f"Request to {url} failed with status: {err.code}"
 
             raise EngineError(reason)
 
     def pretty_error(self, what: str, error: str) -> None:
-        prettyPrinter({
-            "engine_url": self.url,
-            "desc_link": f"file://{FILE_L}",
-            "name": f"[{unquote(what)}][Error]: {error}",
-            "link": self.url + "error",
-            "size": "1 TB",  # lol
-            "seeds": 100,
-            "leech": 100,
-            "pub_date": int(time.time())
-        })
+        prettyPrinter(
+            {
+                "engine_url": self.url,
+                "desc_link": f"file://{FILE_L}",
+                "name": f"[{unquote(what)}][Error]: {error}",
+                "link": self.url + "error",
+                "size": "1 TB",  # lol
+                "seeds": 100,
+                "leech": 100,
+                "pub_date": int(time.time()),
+            }
+        )
 
 
 # pep8
