@@ -223,7 +223,7 @@ class NNMClub:
             if match is None:
                 logger.debug(f"Unexpected page content:\n {page}")
                 raise EngineError("Unexpected page content")
-            torrents_found = int(match[1])
+            torrents_found = int(match[1] or 0)
             if torrents_found <= 0:
                 return 0
         self.draw(page)
