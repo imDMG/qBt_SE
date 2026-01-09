@@ -1,4 +1,4 @@
-# VERSION: 1.16
+# VERSION: 1.17
 # AUTHORS: imDMG [imdmgg@gmail.com]
 
 # rutracker.org search engine plugin for qBittorrent
