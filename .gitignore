@@ -1,10 +1,15 @@
+/.*/
+__pycache__/
 /engines/*.*
 !/engines/*.py
+!/engines/*.png
 /tests
 /proxylist.txt
 /helpers.py
 /nova2.py
 /nova2dl.py
 /novaprinter.py
+/pyproject.toml
 /socks.py
 /sgmllib3.py
+/uv.lock

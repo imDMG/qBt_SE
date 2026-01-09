@@ -15,7 +15,7 @@ from dataclasses import dataclass, field
 from html import unescape
 from pathlib import Path
 from tempfile import NamedTemporaryFile
-from typing import Any, Callable, Optional, cast
+from typing import Any, Callable, Optional, Union
 from urllib.error import HTTPError, URLError
 from urllib.parse import quote, unquote, urlparse
 from urllib.request import ProxyHandler, build_opener
@@ -119,12 +119,14 @@ class Config:
     magnet: bool = False
     proxy: bool = False
     # dynamic_proxy: bool = True
-    proxies: dict = field(default_factory=lambda: {"http": "", "https": ""})
+    proxies: dict[str, str] = field(
+        default_factory=lambda: {"http": "", "https": ""}
+    )
     ua: str = (
         "Mozilla/5.0 (X11; Linux i686; rv:38.0) Gecko/20100101 Firefox/38.0 "
     )
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         try:
             if not self._validate_json(json.loads(FILE_J.read_text())):
                 raise ValueError("Incorrect json scheme.")
@@ -136,19 +138,21 @@ class Config:
     def to_str(self) -> str:
         return json.dumps(self.to_dict(), indent=4, sort_keys=False)
 
-    def to_dict(self) -> dict:
+    def to_dict(self) -> dict[str, Any]:
         return {self._to_camel(k): v for k, v in self.__dict__.items()}
 
-    def _validate_json(self, obj: dict) -> bool:
+    def _validate_json(
+        self, obj: dict[str, Union[str, bool, dict[str, str]]]
+    ) -> bool:
         is_valid = True
         for k, v in self.__dict__.items():
             _val = obj.get(self._to_camel(k))
-            if type(_val) is not type(v):
+            if _val is None or not isinstance(_val, type(v)):
                 is_valid = False
                 continue
-            if type(_val) is dict:
+            if isinstance(_val, dict):
                 for dk, dv in v.items():
-                    if type(_val.get(dk)) is not type(dv):
+                    if not isinstance(_val.get(dk), type(dv)):
                         _val[dk] = dv
                         is_valid = False
             setattr(self, k, _val)
@@ -225,7 +229,7 @@ class Rutor:
                 }
             )
 
-    def _catch_errors(self, handler: Callable, *args: str):
+    def _catch_errors(self, handler: Callable[..., None], *args: str) -> None:
         try:
             self._init()
             handler(*args)
@@ -246,7 +250,7 @@ class Rutor:
                 if not proxy_str.lower().startswith("socks"):
                     continue
                 url = urlparse(proxy_str)
-                socks.set_default_proxy(
+                socks.set_default_proxy(  # type: ignore[attr-defined]
                     socks.PROXY_TYPE_SOCKS5,
                     url.hostname,
                     url.port,
@@ -254,7 +258,7 @@ class Rutor:
                     url.username,
                     url.password,
                 )
-                socket.socket = cast(Any, socks.socksocket)
+                socket.socket = socks.socksocket
                 break
             else:
                 self.session.add_handler(ProxyHandler(config.proxies))
