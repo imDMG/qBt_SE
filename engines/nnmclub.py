@@ -1,4 +1,4 @@
-# VERSION: 2.21
+# VERSION: 2.22
 # AUTHORS: imDMG [imdmgg@gmail.com]
 
 # NoNaMe-Club search engine plugin for qBittorrent
@@ -154,7 +154,7 @@ config = Config()
 class NNMClub:
     name = "NoNaMe-Club"
     url = "https://nnmclub.to/forum/"
-    url_dl = "https://nnm-club.ws/"
+    url_dl = "https://bulk.nnmclub.to/"
     supported_categories = {
         "all": "-1",
         "movies": "14",
