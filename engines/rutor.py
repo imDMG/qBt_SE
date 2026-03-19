@@ -1,4 +1,4 @@
-# VERSION: 1.17
+# VERSION: 1.18
 # AUTHORS: imDMG [imdmgg@gmail.com]
 
 # Rutor.org search engine plugin for qBittorrent
@@ -10,15 +10,17 @@ import re
 import socket
 import sys
 import time
+from collections.abc import Callable
 from concurrent.futures.thread import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from html import unescape
 from pathlib import Path
 from tempfile import NamedTemporaryFile
-from typing import Any, Callable, Optional, Union
+from typing import Any
 from urllib.error import HTTPError, URLError
 from urllib.parse import quote, unquote, urlparse
 from urllib.request import ProxyHandler, build_opener
+
 
 try:
     import socks
@@ -142,7 +144,7 @@ class Config:
         return {self._to_camel(k): v for k, v in self.__dict__.items()}
 
     def _validate_json(
-        self, obj: dict[str, Union[str, bool, dict[str, str]]]
+        self, obj: dict[str, str | bool | dict[str, str]]
     ) -> bool:
         is_valid = True
         for k, v in self.__dict__.items():
@@ -302,7 +304,7 @@ class Rutor:
     def _request(
         self,
         url: str,
-        data: Optional[bytes] = None,
+        data: bytes | None = None,
         repeated: bool = False,
     ) -> bytes:
         try:
@@ -322,7 +324,7 @@ class Rutor:
             elif isinstance(err, HTTPError):
                 reason = f"Request to {url} failed with status: {err.code}"
 
-            raise EngineError(reason)
+            raise EngineError(reason) from err
 
     def pretty_error(self, what: str, error: str) -> None:
         prettyPrinter(

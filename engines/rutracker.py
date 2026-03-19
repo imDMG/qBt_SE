@@ -1,4 +1,4 @@
-# VERSION: 1.17
+# VERSION: 1.18
 # AUTHORS: imDMG [imdmgg@gmail.com]
 
 # rutracker.org search engine plugin for qBittorrent
@@ -10,16 +10,18 @@ import re
 import socket
 import sys
 import time
+from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from html import unescape
 from http.cookiejar import MozillaCookieJar
 from pathlib import Path
 from tempfile import NamedTemporaryFile
-from typing import Any, Callable, Optional, Union
+from typing import Any
 from urllib.error import HTTPError, URLError
 from urllib.parse import quote, unquote, urlencode, urlparse
 from urllib.request import HTTPCookieProcessor, ProxyHandler, build_opener
+
 
 try:
     import socks
@@ -122,7 +124,7 @@ class Config:
         return {self._to_camel(k): v for k, v in self.__dict__.items()}
 
     def _validate_json(
-        self, obj: dict[str, Union[str, bool, dict[str, str]]]
+        self, obj: dict[str, str | bool | dict[str, str]]
     ) -> bool:
         is_valid = True
         for k, v in self.__dict__.items():
@@ -179,7 +181,7 @@ class Rutracker:
         data_encoded = urlencode(form_data, encoding="cp1251").encode("ascii")
         logger.debug(f"Login. Data after: {data_encoded!r}")
         self._request(self.url_login, data_encoded)
-        logger.debug(f"That we have: {[cookie for cookie in self.mcj]}")
+        logger.debug(f"That we have: {list(self.mcj)}")
         if "bb_session" not in [cookie.name for cookie in self.mcj]:
             raise EngineError(
                 "We not authorized, please check your credentials!"
@@ -256,7 +258,7 @@ class Rutracker:
                     url.username,
                     url.password,
                 )
-                socket.socket = socks.socksocket  # type: ignore
+                socket.socket = socks.socksocket
                 break
             else:
                 self.session.add_handler(ProxyHandler(config.proxies))
@@ -278,7 +280,7 @@ class Rutracker:
                 # if cookie.expires < int(time.time())
                 return logger.info("Local cookies is loaded")
             logger.info("Local cookies expired or bad, try to login")
-            logger.debug(f"That we have: {[cookie for cookie in self.mcj]}")
+            logger.debug(f"That we have: {list(self.mcj)}")
         except FileNotFoundError:
             logger.info("Local cookies not exists, try to login")
         self.login()
@@ -315,7 +317,7 @@ class Rutracker:
     def _request(
         self,
         url: str,
-        data: Optional[bytes] = None,
+        data: bytes | None = None,
         repeated: bool = False,
     ) -> bytes:
         try:
@@ -335,7 +337,7 @@ class Rutracker:
             elif isinstance(err, HTTPError):
                 reason = f"Request to {url} failed with status: {err.code}"
 
-            raise EngineError(reason)
+            raise EngineError(reason) from err
 
     def pretty_error(self, what: str, error: str) -> None:
         prettyPrinter(

@@ -1,12 +1,13 @@
 import json
 import tkinter as tk
 from pathlib import Path
-from tkinter import ttk, messagebox
+from tkinter import messagebox, ttk
+from typing import Any
 
 
 class EngineSettingsGUI:
     def __init__(self, engine_name: str):
-        self.config = dict()
+        self.config: dict[str, Any] = {}
         self.cfg_file = Path(engine_name + ".json")
         if self.cfg_file.exists():
             self.config = json.loads(self.cfg_file.read_text())
@@ -22,10 +23,10 @@ class EngineSettingsGUI:
         self.username = tk.StringVar(value=self.config.get("username", ""))
         self.password = tk.StringVar(value=self.config.get("password", ""))
         self.proxy_http = tk.StringVar(
-            value=self.config.get("proxies", dict()).get("http", "")
+            value=self.config.get("proxies", {}).get("http", "")
         )
         self.proxy_https = tk.StringVar(
-            value=self.config.get("proxies", dict()).get("https", "")
+            value=self.config.get("proxies", {}).get("https", "")
         )
 
         self.date = tk.BooleanVar(value=self.config.get("torrentDate", True))
@@ -33,29 +34,44 @@ class EngineSettingsGUI:
         self.proxy = tk.BooleanVar(value=self.config.get("proxy", False))
 
         ttk.Label(mainframe, text="Username:").grid(
-            column=0, row=0, sticky=tk.W)
+            column=0, row=0, sticky=tk.W
+        )
         ttk.Label(mainframe, text="Password:").grid(
-            column=0, row=1, sticky=tk.W, rowspan=2)
+            column=0, row=1, sticky=tk.W, rowspan=2
+        )
 
-        ttk.Entry(mainframe, width=25, textvariable=self.username, state=(
-                    ("!" if self.config.get("username") else "") + tk.DISABLED)
-                  ).grid(column=1, row=0, sticky=tk.EW, padx=(0, 5))
-        ttk.Entry(mainframe, width=25, textvariable=self.password, state=(
-                    ("!" if self.config.get("password") else "") + tk.DISABLED)
-                  ).grid(column=1, row=1, rowspan=2, sticky=tk.EW, padx=(0, 5))
+        ttk.Entry(
+            mainframe,
+            width=25,
+            textvariable=self.username,
+            state=(("!" if self.config.get("username") else "") + tk.DISABLED),
+        ).grid(column=1, row=0, sticky=tk.EW, padx=(0, 5))
+        ttk.Entry(
+            mainframe,
+            width=25,
+            textvariable=self.password,
+            state=(("!" if self.config.get("password") else "") + tk.DISABLED),
+        ).grid(column=1, row=1, rowspan=2, sticky=tk.EW, padx=(0, 5))
 
         ttk.Checkbutton(
-            mainframe, text="Date before torrent", variable=self.date,
-            onvalue=True
+            mainframe,
+            text="Date before torrent",
+            variable=self.date,
+            onvalue=True,
         ).grid(column=2, row=0, sticky=tk.W)
         ttk.Checkbutton(
-            mainframe, text="Use magnet link", variable=self.magnet,
-            onvalue=True, state=(
-                    ("!" if self.config.get("magnet") else "") + tk.DISABLED)
+            mainframe,
+            text="Use magnet link",
+            variable=self.magnet,
+            onvalue=True,
+            state=(("!" if self.config.get("magnet") else "") + tk.DISABLED),
         ).grid(column=2, row=1, sticky=tk.W)
         ttk.Checkbutton(
-            mainframe, text="Proxy", variable=self.proxy, onvalue=True,
-            command=self.proxy_action
+            mainframe,
+            text="Proxy",
+            variable=self.proxy,
+            onvalue=True,
+            command=self.proxy_action,
         ).grid(column=2, row=2, sticky=tk.W)
 
         ttk.Label(mainframe, text="HTTP:").grid(column=0, row=3, sticky=tk.W)
@@ -65,16 +81,17 @@ class EngineSettingsGUI:
         self.http_entry = ttk.Entry(
             mainframe, textvariable=self.proxy_http, state=proxy_state
         )
-        self.http_entry.grid(column=1, row=3, sticky=tk.EW,
-                             padx=(0, 5), pady=(0, 5))
+        self.http_entry.grid(
+            column=1, row=3, sticky=tk.EW, padx=(0, 5), pady=(0, 5)
+        )
         self.https_entry = ttk.Entry(
             mainframe, textvariable=self.proxy_https, state=proxy_state
         )
         self.https_entry.grid(column=1, row=4, sticky=tk.EW, padx=(0, 5))
 
-        ttk.Button(
-            mainframe, text="Save", command=self.close
-        ).grid(column=2, row=3, rowspan=2)
+        ttk.Button(mainframe, text="Save", command=self.close).grid(
+            column=2, row=3, rowspan=2
+        )
 
         self.window.mainloop()
 
@@ -89,8 +106,9 @@ class EngineSettingsGUI:
                 messagebox.showinfo("Error", "Some fields is empty!")
                 return None
 
-        if self.proxy.get() and not (self.http_entry.get()
-                                     or self.https_entry.get()):
+        if self.proxy.get() and not (
+            self.http_entry.get() or self.https_entry.get()
+        ):
             messagebox.showinfo("Error", "Some fields is empty!")
             return None
 
@@ -101,7 +119,7 @@ class EngineSettingsGUI:
         if self.config["proxy"]:
             self.config["proxies"] = {
                 "http": self.http_entry.get(),
-                "https": self.https_entry.get()
+                "https": self.https_entry.get(),
             }
         self.config["torrentDate"] = self.date.get()
         if self.config.get("magnet"):
