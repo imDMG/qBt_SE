@@ -1,4 +1,4 @@
-# VERSION: 2.23
+# VERSION: 2.24
 # AUTHORS: imDMG [imdmgg@gmail.com]
 
 # NoNaMe-Club search engine plugin for qBittorrent
@@ -81,15 +81,15 @@ ICON = (
 )
 
 # setup logging
-logging.basicConfig(
-    filemode="w",
-    filename=FILE_L,
-    format="%(asctime)s %(name)-12s %(levelname)-8s %(message)s",
-    datefmt="%m-%d %H:%M",
-    level=logging.DEBUG,
-)
-
 logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)
+_fh = logging.FileHandler(FILE_L, mode="w")
+_fh.setFormatter(logging.Formatter(
+    fmt="%(asctime)s %(name)-12s %(levelname)-8s %(message)s",
+    datefmt="%m-%d %H:%M",
+))
+logger.addHandler(_fh)
+logger.propagate = False
 
 
 def rng(t: int) -> range:
