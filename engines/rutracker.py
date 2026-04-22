@@ -1,4 +1,4 @@
-# VERSION: 1.19
+# VERSION: 1.20
 # AUTHORS: imDMG [imdmgg@gmail.com]
 
 # rutracker.org search engine plugin for qBittorrent
@@ -321,11 +321,16 @@ class Rutracker:
         repeated: bool = False,
     ) -> bytes:
         try:
-            with self.session.open(url, data, 5) as r:
+            with self.session.open(url, data, 15) as r:
                 # checking that tracker isn't blocked
                 if r.geturl().startswith((self.url, self.url_dl)):
                     return r.read()
                 raise EngineError(f"{url} is blocked. Try another proxy.")
+        except TimeoutError as err:
+            if not repeated:
+                logger.debug("Request timed out. Repeating...")
+                return self._request(url, data, True)
+            raise EngineError(f"{url} is not responding (timed out).") from err
         except (URLError, HTTPError) as err:
             error = str(err.reason)
             reason = f"{url} is not response! Maybe it is blocked."
