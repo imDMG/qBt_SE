@@ -1,4 +1,4 @@
-# VERSION: 2.24
+# VERSION: 2.25
 # AUTHORS: imDMG [imdmgg@gmail.com]
 
 # NoNaMe-Club search engine plugin for qBittorrent
@@ -342,26 +342,36 @@ class NNMClub:
         repeated: bool = False,
     ) -> bytes:
         try:
-            with self.session.open(url, data, 5) as r:
-                # checking that tracker isn't blocked
+            with self.session.open(url, data, 15) as r:
+                # check if the response is from the correct domain
                 if r.geturl().startswith((self.url, self.url_dl)):
                     return r.read()
                 raise EngineError(f"{url} is blocked. Try another proxy.")
-        except (URLError, HTTPError) as err:
-            logger.debug(err)
-            error = str(err.reason)
-            reason = f"{url} is not response! Maybe it is blocked."
-            if "timed out" in error:
+
+        except (URLError, HTTPError, TimeoutError) as err:
+            reason = getattr(err, "reason", None)
+            if isinstance(err, HTTPError):
+                raise EngineError(
+                    f"Request to {url} failed with status: {err.code}"
+                ) from err
+
+            if isinstance(err, TimeoutError) or isinstance(
+                reason, TimeoutError
+            ):
                 if not repeated:
                     logger.debug("Request timed out. Repeating...")
                     return self._request(url, data, True)
-                reason = "Request timed out"
-            if "no host given" in error:
-                reason = "Proxy is bad, try another!"
-            elif isinstance(err, HTTPError):
-                reason = f"Request to {url} failed with status: {err.code}"
 
-            raise EngineError(reason) from err
+                raise EngineError(
+                    f"{url} is not responding (timed out)."
+                ) from err
+
+            if isinstance(reason, str) and reason == "no host given":
+                raise EngineError("Proxy is bad, try another!") from err
+
+            raise EngineError(
+                f"{url} is not response! Maybe it is blocked."
+            ) from err
 
     def pretty_error(self, what: str, error: str) -> None:
         prettyPrinter(
