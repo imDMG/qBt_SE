@@ -1,4 +1,4 @@
-# VERSION: 2.25
+# VERSION: 2.26
 # AUTHORS: imDMG [imdmgg@gmail.com]
 
 # NoNaMe-Club search engine plugin for qBittorrent

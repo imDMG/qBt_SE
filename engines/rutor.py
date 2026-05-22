@@ -1,4 +1,4 @@
-# VERSION: 1.20
+# VERSION: 1.21
 # AUTHORS: imDMG [imdmgg@gmail.com]
 
 # Rutor.org search engine plugin for qBittorrent
