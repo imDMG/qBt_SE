@@ -361,6 +361,6 @@ if __name__ == "__main__":
     if BASEDIR.parent.joinpath("settings_gui.py").exists():
         from settings_gui import EngineSettingsGUI
 
-        EngineSettingsGUI(FILENAME)
+        EngineSettingsGUI(str(BASEDIR / FILENAME))
     engine = rutor()
     engine.search("doctor")
