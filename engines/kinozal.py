@@ -1,4 +1,4 @@
-# VERSION: 2.24
+# VERSION: 2.26
 # AUTHORS: imDMG [imdmgg@gmail.com]
 
 # Kinozal.tv search engine plugin for qBittorrent
@@ -49,7 +49,9 @@ RE_TORRENTS = re.compile(
 RE_RESULTS = re.compile(r"</span>Найдено\s+?(\d+?)\s+?раздач", re.S)
 PATTERNS = ("%sbrowse.php?s=%s&c=%s", "%s&page=%s")
 
-PAGES = 50
+SIZE_TABLE = str.maketrans({"Т": "T", "Г": "G", "М": "M", "К": "K", "Б": "B"})
+
+ITEMS_PER_PAGE = 50
 
 # base64 encoded image
 ICON = (
@@ -81,16 +83,18 @@ ICON = (
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
 _fh = logging.FileHandler(FILE_L, mode="w")
-_fh.setFormatter(logging.Formatter(
-    fmt="%(asctime)s %(name)-12s %(levelname)-8s %(message)s",
-    datefmt="%m-%d %H:%M",
-))
+_fh.setFormatter(
+    logging.Formatter(
+        fmt="%(asctime)s %(name)-12s %(levelname)-8s %(message)s",
+        datefmt="%m-%d %H:%M",
+    )
+)
 logger.addHandler(_fh)
 logger.propagate = False
 
 
 def rng(t: int) -> range:
-    return range(1, -(-t // PAGES))
+    return range(1, -(-t // ITEMS_PER_PAGE))
 
 
 def date_normalize(date_str: str) -> int:
@@ -107,6 +111,12 @@ def date_normalize(date_str: str) -> int:
     return int(
         time.mktime(time.strptime(f"{pub_date} {pub_time}", "%d.%m.%Y %H:%M"))
     )
+
+
+def gunzip(data: bytes) -> bytes:
+    if data.startswith(b"\x1f\x8b\x08"):
+        return gzip.decompress(data)
+    return data
 
 
 class EngineError(Exception): ...
@@ -170,7 +180,7 @@ config = Config()
 
 class Kinozal:
     name = "Kinozal"
-    url = "https://kinozal.tv/"
+    url = "https://kinozal.me/"
     url_dl = url.replace("//", "//dl.")
     url_login = url + "takelogin.php"
     supported_categories = {
@@ -201,11 +211,11 @@ class Kinozal:
         logger.debug(f"Login. Data before: {form_data}")
         # encoding to cp1251 then do default encode whole string
         data_encoded = urlencode(form_data, encoding="cp1251").encode()
-        logger.debug("Login. Data after: {data_encoded}")
+        logger.debug(f"Login. Data after: {data_encoded}")
 
         self._request(self.url_login, data_encoded)
         logger.debug(f"That we have: {list(self.mcj)}")
-        if "uid" not in [cookie.name for cookie in self.mcj]:
+        if not any(c.name == "uid" for c in self.mcj):
             raise EngineError(
                 "We not authorized, please check your credentials!"
             )
@@ -213,15 +223,14 @@ class Kinozal:
         logger.info("We successfully authorized")
 
     def searching(self, query: str, first: bool = False) -> int:
-        response = self._request(query)
-        if response.startswith(b"\x1f\x8b\x08"):
-            response = gzip.decompress(response)
+        response = gunzip(self._request(query))
         page, torrents_found = response.decode("cp1251"), -1
         if first:
             # check login status
             if "Гость! ( Зарегистрируйтесь )" in page:
                 logger.debug("Looks like we lost session id, lets login")
                 self.login()
+                # we no need retry request because guests can search
             # firstly, we check if there is a result
             match = RE_RESULTS.search(page)
             if match is None:
@@ -235,9 +244,6 @@ class Kinozal:
         return torrents_found
 
     def draw(self, html: str) -> None:
-        table = str.maketrans(
-            {"Т": "T", "Г": "G", "М": "M", "К": "K", "Б": "B"}
-        )
         for tor in RE_TORRENTS.finditer(html):
             prettyPrinter(
                 {
@@ -245,9 +251,9 @@ class Kinozal:
                         self.url_dl, tor.group("desc_link").split("=")[-1]
                     ),
                     "name": unescape(tor.group("name")),
-                    "size": tor.group("size").translate(table),
-                    "seeds": int(tor.group("seeds")),
-                    "leech": int(tor.group("leech")),
+                    "size": tor.group("size").translate(SIZE_TABLE),
+                    "seeds": max(0, int(tor.group("seeds"))),
+                    "leech": max(0, int(tor.group("leech"))),
                     "engine_url": self.url,
                     "desc_link": self.url + tor.group("desc_link"),
                     "pub_date": date_normalize(tor.group("pub_date")),
@@ -314,10 +320,11 @@ class Kinozal:
         # make first request (maybe it enough)
         t0, total = time.time(), self.searching(query, True)
         # do async requests
-        if total > PAGES:
+        if total > ITEMS_PER_PAGE:
             qrs = [PATTERNS[1] % (query, x) for x in rng(total)]
-            with ThreadPoolExecutor(len(qrs)) as executor:
-                executor.map(self.searching, qrs, timeout=30)
+            with ThreadPoolExecutor(min(len(qrs), 8)) as executor:
+                for q in qrs:
+                    executor.submit(self.searching, q)
 
         logger.debug(f"--- {time.time() - t0} seconds ---")
         logger.info(f"Found torrents: {total}")
@@ -339,8 +346,7 @@ class Kinozal:
     @staticmethod
     def _get_download_path(response: bytes) -> str:
         if config.magnet:
-            if response.startswith(b"\x1f\x8b\x08"):
-                response = gzip.decompress(response)
+            response = gunzip(response)
             return "magnet:?xt=urn:btih:" + response.decode()[18:58]
         # Create a torrent file
         with NamedTemporaryFile(suffix=".torrent", delete=False) as fd:

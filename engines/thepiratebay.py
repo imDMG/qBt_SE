@@ -1,7 +1,7 @@
 # VERSION: 1.22
 # AUTHORS: imDMG [imdmgg@gmail.com]
 
-# Rutor.org search engine plugin for qBittorrent
+# ThePirateBay search engine plugin for qBittorrent
 
 import base64
 import json
@@ -11,24 +11,21 @@ import socket
 import sys
 import time
 from collections.abc import Callable
-from concurrent.futures.thread import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from html import unescape
 from pathlib import Path
-from tempfile import NamedTemporaryFile
 from typing import Any
 from urllib.error import HTTPError, URLError
-from urllib.parse import quote, unquote, urlparse
+from urllib.parse import quote, unquote, urlencode, urlparse
 from urllib.request import ProxyHandler, build_opener
 
 
-try:
-    import socks
-    from novaprinter import prettyPrinter
-except ImportError:
+if __name__ == "__main__" or __name__.startswith(Path(__file__).stem):
     sys.path.insert(0, str(Path(__file__).parent.parent.absolute()))
-    import socks
-    from novaprinter import prettyPrinter
+
+import socks
+from novaprinter import prettyPrinter
+
 
 FILE = Path(__file__)
 BASEDIR = FILE.parent.absolute()
@@ -38,37 +35,19 @@ FILE_J, FILE_C, FILE_L = [
     BASEDIR / (FILENAME + fl) for fl in (".json", ".cookie", ".log")
 ]
 
-RE_TORRENTS = re.compile(
-    r'(?:gai|tum)"><td>(?P<pub_date>.+?)</td.+?href="(?P<mag_link>magnet:'
-    r'.+?)".+?href="/(?P<desc_link>torrent/(?P<tor_id>\d+).+?)">(?P<name>.+?)'
-    r'</a.+?right">(?P<size>[.\d]+?&nbsp;\w+?)</td.+?<span.+?(?P<seeds>\d+?)'
-    r"</span>.+?<span.+?(?P<leech>\d+?)</span>",
-    re.S,
-)
-RE_RESULTS = re.compile(r"</b>\sРезультатов\sпоиска\s(\d{1,4})\s", re.S)
-PATTERNS = ("%ssearch/%i/%i/000/0/%s",)
+PATTERNS = ("%sq.php?q=%s&cat=%s", "magnet:?xt=urn:btih:{}&{}&%s")
 
 ITEMS_PER_PAGE = 100
 
 # base64 encoded image
 ICON = (
-    "AAABAAEAEBAAAAEAGABoAwAAFgAAACgAAAAQAAAAIAAAAAEAGAAAAAAAAAAAAAAAAAAAAAAAA"
-    "AAAAAAAAAAAAc4AAMwHNdcQ4vsN3fYS2fUY3fUe3fMj4fkk4fco4PYo5fgk7f5gp8ZuZZtsa5"
-    "9FIXZEGm4kh74PyeoLGp8NHK4PHrwQHr8VIb8XJL4bJrUcKJ8optEdtPMBGcQAIcXeZAPVYwd"
-    "A3MQFf8EDAJoFAMEEAM0AANIAAM4AAM0EAL8CAI8bXaEV1/cBHMsGDNTVWAOodTIU5/ELuOAJ"
-    "M6sEALsIAMoEALkCBbgFALUGAKshgMcvpNUTzOoFQNIFANqxQgBpkmgKue8IT8UUy+8HO7MHP"
-    "b8Gt+IG3vQHm9YKi84X4foKI7kRl+AWiMwSDYyxjXZAy84HdNYEALcPguYM+vsL6PgGl/wBWN"
-    "4K1/EF//8LbdQEALgEVc41zMp0YC+t0N0XxPcCIbwGAMkGGOUGUvQKPPUEANsIU9ENvvAJw/U"
-    "LnekGAr8FJcIUzfRycEZwzuMFnuYEArQCAdYDANYHAMQFAMwGPcwM2vsHU/QKPegLwvYEEckF"
-    "BrsOt/Y+kYky5/YGgNAGAKkHAc4JMssSoN0GTb0L2/gHYPkCAPkFKOMP0fIHGc0EAKwLgNAq3"
-    "OMd/P0Al9ACBqQCAMALbOMG+/8E8v0KjugBAO4CAPAGQ9MNyPYEB8QBAKQCe8cW9//T+/09+/"
-    "8Aqd8GIbIFAMAKbuUG6f8Ht/IFFeEAAMYPqeYMhOEGB6oCgtUY5fuG0tv//vzs+PlQ9fwAw+4"
-    "CLLoIALgJR+EFU+wEFcweZNAkquMFMrkArOor4fSrxsvWx8n5/fv5+fn3+/iC8fsLzPIAUscE"
-    "ALMDAL8QPtAsetUFWsUHue1r7/vc6evOzMfFx8n5/fvy+fj89vb/9/e+9/o44/oNi9kBD54CF"
-    "KQJg9Qu4vu09vr/+ff89fTIz8rFx8n5/fvy+fj59vb49vf/+fbh+vtk6vw1rN03suFn6vnl/f"
-    "3/+fn49vj18/TIz8rFx8n5/fvy+fj59vb39vf39/f//P3w+fme6/ak8Prv+fj//f369/r39vj"
-    "18/TIz8rFx8ngBwAA4AMAAMADAADAAwAAwAMAAMABAACAAQAAgAEAAAAAAAAAAAAAgAEAAMAD"
-    "AADgBwAA+B8AAPw/AAD+fwAA"
+    "iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAMAAAAoLQ9TAAAAZlBMVEX///8AAAD+/v5DQ0Ovr"
+    "69ZWVlJSUlUVFQFBQUTExMQEBBfX1+ysrJlZWU2Njbl5eUfHx8nJyfR0dGcnJyOjo6lpaU9PT"
+    "3x8fHX19ctLS2IiIhxcXEbGxu/v7+CgoJ6enrIyMjd3d1jlIJrAAAAnklEQVQYlVWP0RKEIAh"
+    "FIbPUrDSzMrPa///JpTab2fPGgbkAAFFk4GapWMbfosSXOguBUgmByB8RhkYvrV5f0fXcWDtk"
+    "4RDVFaAEdsUj0Ai0lBFILNFRp96wmRQyOiXhPnpdeu/LUveOw4FsasaBZufT7ZJBiswfEmVnt"
+    "omzYAF6ZRhvx7UOUzRNokkZ53v9nDie16vpVxN99YF/KPoLnGwIE09eqPEAAAAASUVORK5CYI"
+    "I="
 )
 
 # setup logging
@@ -85,34 +64,6 @@ logger.addHandler(_fh)
 logger.propagate = False
 
 
-def rng(t: int) -> range:
-    return range(1, -(-t // ITEMS_PER_PAGE))
-
-
-def date_normalize(date_str: str) -> int:
-    # replace names month
-    months = (
-        "Янв",
-        "Фев",
-        "Мар",
-        "Апр",
-        "Май",
-        "Июн",
-        "Июл",
-        "Авг",
-        "Сен",
-        "Окт",
-        "Ноя",
-        "Дек",
-    )
-    date_str = [
-        date_str.replace(m, f"{i:02d}")
-        for i, m in enumerate(months, 1)
-        if m in date_str
-    ][0]
-    return int(time.mktime(time.strptime(date_str, "%d %m %y")))
-
-
 class EngineError(Exception): ...
 
 
@@ -120,15 +71,14 @@ class EngineError(Exception): ...
 class Config:
     # username: str = "USERNAME"
     # password: str = "PASSWORD"
-    magnet: bool = False
     proxy: bool = False
-    # dynamic_proxy: bool = True
     proxies: dict[str, str] = field(
         default_factory=lambda: {"http": "", "https": ""}
     )
     ua: str = (
         "Mozilla/5.0 (X11; Linux i686; rv:38.0) Gecko/20100101 Firefox/38.0 "
     )
+    trackers: list[str] = field(default_factory=list)
 
     def __post_init__(self) -> None:
         try:
@@ -172,66 +122,72 @@ class Config:
 config = Config()
 
 
-class Rutor:
-    name = "Rutor"
-    url = "https://rutor.info/"
-    url_dl = url.replace("//", "//d.") + "download/"
+class ThePirateBay:
+    name = "ThePirateBay"
+    url = "https://thepiratebay.org/"
+    url_api = "https://apibay.org/"
     supported_categories = {
-        "all": 0,
-        "movies": 1,
-        "tv": 6,
-        "music": 2,
-        "games": 8,
-        "anime": 10,
-        "software": 9,
-        "pictures": 3,
-        "books": 11,
+        "all": "0",
+        "books": "601",
+        "games": "400",
+        "movies": "200",
+        "music": "100",
+        "pictures": "603",
+        "software": "300",
+        "tv": "205,208,212",
     }
 
     # establish connection
     session = build_opener()
+    _magnet: str
 
     def search(self, what: str, cat: str = "all") -> None:
         self._catch_errors(self._search, what, cat)
 
-    def download_torrent(self, url: str) -> None:
-        self._catch_errors(self._download_torrent, url)
-
     def searching(self, query: str, first: bool = False) -> int:
-        page, torrents_found = self._request(query).decode(), -1
-        if first:
-            # firstly, we check if there is a result
-            match = RE_RESULTS.search(page)
-            if match is None:
-                logger.debug(f"Unexpected page content:\n {page}")
-                raise EngineError("Unexpected page content")
-            torrents_found = int(match[1])
-            if torrents_found <= 0:
-                return 0
-        self.draw(page)
+        json_data: list[dict[str, str]] = json.loads(
+            self._request(query).decode()
+        )
+        if json_data[0]["id"] == "0":
+            return 0
 
-        return torrents_found
+        self.draw(json_data)
 
-    def draw(self, html: str) -> None:
-        for tor in RE_TORRENTS.finditer(html):
+        return len(json_data)
+
+    def draw(self, json_data: list[dict[str, str]]) -> None:
+        for tor in json_data:
             prettyPrinter(
                 {
-                    "link": (
-                        tor.group("mag_link")
-                        if config.magnet
-                        else self.url_dl + tor.group("tor_id")
+                    "link": self._magnet.format(
+                        tor["info_hash"],
+                        urlencode({"dn": tor["name"]}),
                     ),
-                    "name": unescape(tor.group("name")),
-                    "size": tor.group("size").replace("&nbsp;", " "),
-                    "seeds": max(0, int(tor.group("seeds"))),
-                    "leech": max(0, int(tor.group("leech"))),
+                    "name": unescape(tor["name"]),
+                    "size": int(tor["size"]),
+                    "seeds": max(0, int(tor["seeders"])),
+                    "leech": max(0, int(tor["leechers"])),
                     "engine_url": self.url,
-                    "desc_link": self.url + tor.group("desc_link"),
-                    "pub_date": date_normalize(
-                        unescape(tor.group("pub_date"))
-                    ),
+                    "desc_link": f"{self.url}description.php?id={tor['id']}",
+                    "pub_date": int(tor["added"]),
                 }
             )
+
+    def _get_trackers(self) -> list[str]:
+        if config.trackers:
+            return config.trackers
+
+        with self.session.open(f"{self.url}static/main.js") as r:
+            js = r.read().decode()
+
+        config.trackers = re.findall(
+            r"^\s+?(?:let\s+?)?tr\s+?(?:\+)?=.+?\('(.+?)'\);$",
+            js,
+            re.MULTILINE | re.DOTALL,
+        )
+        FILE_J.write_text(config.to_str())
+
+        return config.trackers
 
     def _catch_errors(self, handler: Callable[..., None], *args: str) -> None:
         try:
@@ -271,38 +227,21 @@ class Rutor:
         # change user-agent
         self.session.addheaders = [("User-Agent", config.ua)]
 
-    def _search(self, what: str, cat: str = "all") -> None:
-        query = PATTERNS[0] % (
-            self.url,
-            0,
-            self.supported_categories[cat],
-            quote(unquote(what)),
+        self._magnet = PATTERNS[1] % urlencode(
+            [("tr", t) for t in self._get_trackers()]
         )
 
-        # make first request (maybe it enough)
+    def _search(self, what: str, cat: str = "all") -> None:
+        query = PATTERNS[0] % (
+            self.url_api,
+            quote(unquote(what)),
+            self.supported_categories[cat],
+        )
+
         t0, total = time.time(), self.searching(query, True)
-        # do async requests
-        if total > ITEMS_PER_PAGE:
-            query = query.replace("h/0", "h/{}")
-            qrs = [query.format(x) for x in rng(total)]
-            with ThreadPoolExecutor(len(qrs)) as executor:
-                for q in qrs:
-                    executor.submit(self.searching, q)
 
         logger.debug(f"--- {time.time() - t0} seconds ---")
         logger.info(f"Found torrents: {total}")
-
-    def _download_torrent(self, url: str) -> None:
-        # Download url
-        response = self._request(url)
-
-        # Create a torrent file
-        with NamedTemporaryFile(suffix=".torrent", delete=False) as fd:
-            fd.write(response)
-
-            # return file path
-            logger.debug(fd.name + " " + url)
-            print(fd.name + " " + url)
 
     def _request(
         self,
@@ -313,7 +252,7 @@ class Rutor:
         try:
             with self.session.open(url, data, 15) as r:
                 # check if the response is from the correct domain
-                if r.geturl().startswith((self.url, self.url_dl)):
+                if r.geturl().startswith((self.url, self.url_api)):
                     return r.read()
                 raise EngineError(f"{url} is blocked. Try another proxy.")
 
@@ -358,12 +297,13 @@ class Rutor:
 
 
 # pep8
-rutor = Rutor
+thepiratebay = ThePirateBay
 
 if __name__ == "__main__":
     if BASEDIR.parent.joinpath("settings_gui.py").exists():
         from settings_gui import EngineSettingsGUI
 
         EngineSettingsGUI(str(BASEDIR / FILENAME))
-    engine = rutor()
+
+    engine = thepiratebay()
     engine.search("doctor")

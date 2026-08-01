@@ -1,4 +1,4 @@
-# VERSION: 1.21
+# VERSION: 1.22
 # AUTHORS: imDMG [imdmgg@gmail.com]
 
 # rutracker.org search engine plugin for qBittorrent
@@ -28,6 +28,7 @@ try:
     from novaprinter import prettyPrinter
 except ImportError:
     sys.path.insert(0, str(Path(__file__).parent.parent.absolute()))
+
     import socks
     from novaprinter import prettyPrinter
 
@@ -48,7 +49,7 @@ RE_TORRENTS = re.compile(
 RE_RESULTS = re.compile(r"Результатов\sпоиска:\s(\d{1,3})\s<span", re.S)
 PATTERNS = ("%stracker.php?nm=%s&c=%s", "%s&start=%s")
 
-PAGES = 50
+ITEMS_PER_PAGE = 50
 
 # base64 encoded image
 ICON = (
@@ -80,16 +81,22 @@ ICON = (
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
 _fh = logging.FileHandler(FILE_L, mode="w")
-_fh.setFormatter(logging.Formatter(
-    fmt="%(asctime)s %(name)-12s %(levelname)-8s %(message)s",
-    datefmt="%m-%d %H:%M",
-))
+_fh.setFormatter(
+    logging.Formatter(
+        fmt="%(asctime)s %(name)-12s %(levelname)-8s %(message)s",
+        datefmt="%m-%d %H:%M",
+    )
+)
 logger.addHandler(_fh)
 logger.propagate = False
 
 
 def rng(t: int) -> range:
-    return range(PAGES, -(-t // PAGES) * PAGES, PAGES)
+    return range(
+        ITEMS_PER_PAGE,
+        -(-t // ITEMS_PER_PAGE) * ITEMS_PER_PAGE,
+        ITEMS_PER_PAGE,
+    )
 
 
 class EngineError(Exception): ...
@@ -182,7 +189,7 @@ class Rutracker:
         logger.debug(f"Login. Data after: {data_encoded!r}")
         self._request(self.url_login, data_encoded)
         logger.debug(f"That we have: {list(self.mcj)}")
-        if "bb_session" not in [cookie.name for cookie in self.mcj]:
+        if not any(cookie.name == "bb_session" for cookie in self.mcj):
             raise EngineError(
                 "We not authorized, please check your credentials!"
             )
@@ -295,10 +302,11 @@ class Rutracker:
         # make first request (maybe it enough)
         t0, total = time.time(), self.searching(query, True)
         # do async requests
-        if total > PAGES:
+        if total > ITEMS_PER_PAGE:
             qrs = [PATTERNS[1] % (query, x) for x in rng(total)]
-            with ThreadPoolExecutor(len(qrs)) as executor:
-                executor.map(self.searching, qrs, timeout=30)
+            with ThreadPoolExecutor(min(len(qrs), 8)) as executor:
+                for q in qrs:
+                    executor.submit(self.searching, q)
 
         logger.debug(f"--- {time.time() - t0} seconds ---")
         logger.info(f"Found torrents: {total}")

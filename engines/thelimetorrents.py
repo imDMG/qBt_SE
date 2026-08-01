@@ -1,7 +1,7 @@
-# VERSION: 2.27
+# VERSION: 1.04
 # AUTHORS: imDMG [imdmgg@gmail.com]
 
-# NoNaMe-Club search engine plugin for qBittorrent
+# LimeTorrents search engine plugin for qBittorrent
 
 import base64
 import json
@@ -11,16 +11,15 @@ import socket
 import sys
 import time
 from collections.abc import Callable
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures.thread import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from html import unescape
-from http.cookiejar import Cookie, MozillaCookieJar
 from pathlib import Path
 from tempfile import NamedTemporaryFile
 from typing import Any
 from urllib.error import HTTPError, URLError
 from urllib.parse import quote, unquote, urlparse
-from urllib.request import HTTPCookieProcessor, ProxyHandler, build_opener
+from urllib.request import ProxyHandler, build_opener
 
 
 try:
@@ -31,6 +30,7 @@ except ImportError:
     import socks
     from novaprinter import prettyPrinter
 
+
 FILE = Path(__file__)
 BASEDIR = FILE.parent.absolute()
 
@@ -39,45 +39,35 @@ FILE_J, FILE_C, FILE_L = [
     BASEDIR / (FILENAME + fl) for fl in (".json", ".cookie", ".log")
 ]
 
-
 RE_TORRENTS = re.compile(
-    r'topictitle"\shref="(?P<desc_link>.+?)"><b>(?P<name>.+?)</b>.+?'
-    r'href="(?P<link>d.+?)".+?<u>(?P<size>\d+?)</u>.+?<b>(?P<seeds>\d+?)'
-    r"</b>.+?<b>(?P<leech>\d+?)</b>.+?<u>(?P<pub_date>\d+?)</u>",
+    r'tt-name"><a\s+?href="(?P<link>.+?)".+?<a\s+?href="(?P<desc_link>.+?)"'
+    r'>(?P<name>.+?)<.+?tdnormal">(?P<pub_date>.+?)<.+?tdnormal">(?P<size>.+?)'
+    r'<.+?tdseed">(?P<seeds>\d+?)<.+?tdleech">(?P<leech>\d+?)<',
+)
+
+RE_RESULTS = re.compile(
+    r"(?:<h2>No results found</h2>|"
+    r'search_stat">(?:.+>(\d+?)</a><a.+?id="next".+?)?<)',
     re.S,
 )
-RE_RESULTS = re.compile(
-    r'<span class="nav" title="">(?:.+?:\s(\d{1,3}\s))?', re.S
-)
-# RE_CODE = re.compile(r'name="code"\svalue="(.+?)"', re.S)
-PATTERNS = ("%stracker.php?nm=%s&%s", "%s&start=%s")
+PATTERNS = ("%s/search/%s/%s/date/%i/",)
 
-ITEMS_PER_PAGE = 50
+ITEMS_PER_PAGE = 40
 
 # base64 encoded image
 ICON = (
-    "AAABAAEAEBAAAAEAIABoBAAAFgAAACgAAAAQAAAAIAAAAAEAIAAAAAAAAAAAAAAAAAAAAAAAA"
-    "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAaQicAXRQFADICAQAHAAAAAAAAAA"
-    "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAADz4QA8PizAPu3XQDpjEI"
-    "BtgkCABoAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABAIAEuyUAP3/"
-    "8AD//akA//+hAP92SgCVAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAFAAAAAAAAAAAAAAAA"
-    "AEAADjLiQD8//wA//7RFP//+lX/WlsPlwAAAAMAAAAGAAAAAAAAAAAAAAAAEAgAQqNBAP99HA"
-    "DfIAYAfgAAABQAAAAX21UC///4AP///Sj/+/Z//lZcMJOOjQCrqIEAwQ4CADAAAAAAAAAAAGE"
-    "XAM39oAD//7oA/9ucAP94GwDFVRkK6p0wAP//owD/+KoB/+FTC///uQD//+wA//67AP6QUQC9"
-    "DggAGAAAAACPNQDl964A//qqAv//3AD//8sB/39WAP85AwX/nxkA/5MQAP/sJQD/0T8A//Z9A"
-    "P/6kwD/86AA/qJGALwTAABEtzcA5cshAP/jOAD//7wg///+Dv/RUQH/AgEE8hcAAG40BgB3RA"
-    "AAzlYCAPh0BAD/zh8A//+RAP//hQD/5B8A/xcAAEx+HgDXz5oc/8yfPv//2g7/6VMA/AkEABQ"
-    "AAAAAAAAAAQAAAA4cCgBBOwkAg3EfAKyPfQDEdkAAq0ELAGYAAAAABQMBQNldFf3/8w3///sA"
-    "/7AoAPIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAchNAPLaL"
-    "gD/+8AA//eOAP9qDAGpAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
-    "AAAAFwLgCX0h8A//WiAP/+TQD/KQAZAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
-    "AAAAAAAAAAAAAAAALQwAZqgRAPr0hwD/2VIA/QAAAAYAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
-    "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAoBACp6BAD/7H0A/3ZlALoAAAAAAAAAAAAAAAAAAAAAAA"
-    "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAARAQAx4zcA/93AAPQAAAAIAAAAAAAAAAA"
-    "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAACgEASawXAPMTCgAnAAAA"
-    "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/D+sQfgfrEH4H"
-    "6xBuAesQQADrEEAAaxBAACsQQAArEEBAKxBg/+sQQP/rEED/6xBg/+sQYf/rEGH/6xBj/+sQQ"
-    "=="
+    "iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAACVUlEQVQ4jc2SPWgTcRjGf3eXr"
+    "16aRlO0trW0sX6gRSoW/KSDKBQEF3FRFHFRhCxurq4WFxcXQSjiIigIfgxVHKyLrYtJFYW2Fq"
+    "3Npbkkl/9d7jsuLZhSBDef5YWXlx8P7/PAf62jL7Nt+591R/52I61fnJ86k708cOXWtrbOsYT"
+    "c0emFVuCEzqLpV985zeXH2+PHX+3LDIcbAg5Nj2ZuduXyu9XB7q42h3TMo+EniCoebpAgoEi+"
+    "KgplJ8yd7b/wFkBusSOF5+Ko3UuiSsUxcIPP6M4jHuRfM1GY4Ys+yYFNk0NRaW7y7ux4DkD5E"
+    "zB4ve+q5LgjrhXnzc+HhLwgHdNYFHmEX6RsL5CKFfCDT/JM2RsbzZ142wLIXtx0SYosDS2bBo"
+    "s1EzUqGNmS5+AWjXS8h1N97ylaPSSUMj8a32Uj6G9r+XBgWvWkCmr6M/HYDla8/dz7IkhHBcJ"
+    "J8WS+C+FrfNV30ZveiqAYtgAs0ysYCYfMZkiq39BsCVU6jG7FWa5XiXGSilsjk0wirAofCh9f"
+    "t6Swd6J3T097dHZXZ1xOJRQiEQlZlvCCJpVGk5oZUDdcaiWbX5pdNp0wq6wmoQKZlaf1SOJIf"
+    "FiWGQjdELsRYgofIXwaNQ+h21Q0m1LZbQoruKbdNqYVIAl0AGkgI+bduSCrHHO9MGUKn5rhUa"
+    "l6lHSHku5SNnxX2OENbdy4vxZjsDpVoN0vh5HqtL1gJZsDNddP6YYvVWoeuuY71UVvxo1yeuV"
+    "O/flGTVxzkwF6gZ1AHwodKBi4FIApQOMfJLGurev1G5gZHg1VzNdyAAAAAElFTkSuQmCC"
 )
 
 # setup logging
@@ -95,11 +85,33 @@ logger.propagate = False
 
 
 def rng(t: int) -> range:
-    return range(
-        ITEMS_PER_PAGE,
-        -(-t // ITEMS_PER_PAGE) * ITEMS_PER_PAGE,
-        ITEMS_PER_PAGE,
+    return range(2, -(-t // ITEMS_PER_PAGE) + 1)
+
+
+def date_normalize(date_str: str) -> int:
+    now = int(time.time())
+    units = {
+        "year": 31536000,
+        "month": 2592000,
+        "week": 604800,
+        "day": 86400,
+        "hour": 3600,
+        "minute": 60,
+    }
+
+    date_str = date_str.replace("yesterday", "1 day").replace(
+        "last month", "1 month"
     )
+
+    match = re.search(r"(\d+)\s+(\w+)", date_str)
+    if not match:
+        raise ValueError(f"Invalid date string: {date_str}")
+
+    amount, unit = int(match.group(1)), match.group(2).rstrip("s")
+    if unit not in units:
+        raise ValueError(f"Invalid date string: {date_str}")
+
+    return now - amount * units[unit]
 
 
 class EngineError(Exception): ...
@@ -107,9 +119,9 @@ class EngineError(Exception): ...
 
 @dataclass
 class Config:
-    username: str = "USERNAME"
-    cookies: str = "COOKIES"
-    # magnet: bool = False
+    # username: str = "USERNAME"
+    # password: str = "PASSWORD"
+    magnet: bool = False
     proxy: bool = False
     # dynamic_proxy: bool = True
     proxies: dict[str, str] = field(
@@ -161,23 +173,22 @@ class Config:
 config = Config()
 
 
-class NNMClub:
-    name = "NoNaMe-Club"
-    url = "https://nnmclub.to/forum/"
-    url_dl = "https://bulk.nnmclub.to/"
+class TheLimeTorrents:
+    name = "TheLimeTorrents"
+    url = "https://www.limetorrents.fun"
+    url_dl = "https://itorrents.net"
     supported_categories = {
-        "all": "-1",
-        "movies": "14",
-        "tv": "27",
-        "music": "16",
-        "games": "17",
-        "anime": "24",
-        "software": "21",
+        "all": "all",
+        "anime": "anime",
+        "software": "applications",
+        "games": "games",
+        "movies": "movies",
+        "music": "music",
+        "tv": "tv",
     }
-    # cookies
-    mcj = MozillaCookieJar()
+
     # establish connection
-    session = build_opener(HTTPCookieProcessor(mcj))
+    session = build_opener()
 
     def search(self, what: str, cat: str = "all") -> None:
         self._catch_errors(self._search, what, cat)
@@ -185,59 +196,15 @@ class NNMClub:
     def download_torrent(self, url: str) -> None:
         self._catch_errors(self._download_torrent, url)
 
-    def login(self) -> None:
-        self.mcj.clear()
-        if config.cookies == "COOKIES":
-            raise EngineError("Empty cookies in config file")
-        for cookie in config.cookies.split("; "):
-            name, value = cookie.split("=", 1)
-            self.mcj.set_cookie(
-                Cookie(
-                    0,
-                    name,
-                    value,
-                    None,
-                    False,
-                    "nnmclub.to",
-                    True,
-                    False,
-                    "/",
-                    True,
-                    False,
-                    None,
-                    False,
-                    None,
-                    None,
-                    {},
-                )
-            )
-
-        logger.debug(f"That we have: {list(self.mcj)}")
-        if "phpbb2mysql_4_sid" not in [cookie.name for cookie in self.mcj]:
-            raise EngineError(
-                "We not authorized, please check your credentials!"
-            )
-        self.mcj.save(str(FILE_C), ignore_discard=True, ignore_expires=True)
-        logger.info("We successfully authorized")
-
     def searching(self, query: str, first: bool = False) -> int:
-        page, torrents_found = (
-            self._request(query).decode("cp1251", "ignore"),
-            -1,
-        )
+        page, torrents_found = self._request(query).decode(), -1
         if first:
-            # check login status
-            if f"Выход [ {config.username} ]" not in page:
-                logger.debug(
-                    f"Looks like we lost session id, lets login:\n {page}"
-                )
-                self.login()
             # firstly, we check if there is a result
             match = RE_RESULTS.search(page)
             if match is None:
                 logger.debug(f"Unexpected page content:\n {page}")
                 raise EngineError("Unexpected page content")
-            torrents_found = int(match[1] or 0)
+            torrents_found = int(match.group(1) or 0) * ITEMS_PER_PAGE
             if torrents_found <= 0:
                 return 0
         self.draw(page)
@@ -248,14 +215,20 @@ class NNMClub:
         for tor in RE_TORRENTS.finditer(html):
             prettyPrinter(
                 {
-                    "link": self.url + tor.group("link"),
+                    "link": (
+                        self.url + tor.group("desc_link")
+                        if config.magnet
+                        else tor.group("link")
+                    ),
                     "name": unescape(tor.group("name")),
-                    "size": tor.group("size"),
+                    "size": tor.group("size").replace("&nbsp;", " "),
                     "seeds": max(0, int(tor.group("seeds"))),
                     "leech": max(0, int(tor.group("leech"))),
                     "engine_url": self.url,
                     "desc_link": self.url + tor.group("desc_link"),
-                    "pub_date": int(tor.group("pub_date")),
+                    "pub_date": date_normalize(
+                        unescape(tor.group("pub_date").lower())
+                    ),
                 }
             )
 
@@ -297,33 +270,21 @@ class NNMClub:
         # change user-agent
         self.session.addheaders = [("User-Agent", config.ua)]
 
-        # load local cookies
-        try:
-            self.mcj.load(str(FILE_C), ignore_discard=True)
-            if "phpbb2mysql_4_data" in [cookie.name for cookie in self.mcj]:
-                # if cookie.expires < int(time.time())
-                return logger.info("Local cookies is loaded")
-            logger.info("Local cookies expired or bad, try to login")
-            logger.debug(f"That we have: {list(self.mcj)}")
-        except FileNotFoundError:
-            logger.info("Local cookies not exists, try to login")
-        return self.login()
-
     def _search(self, what: str, cat: str = "all") -> None:
-        c = self.supported_categories[cat]
         query = PATTERNS[0] % (
             self.url,
+            self.supported_categories[cat],
             quote(unquote(what)),
-            "f=-1" if c == "-1" else "c=" + c,
+            0,
         )
 
         # make first request (maybe it enough)
         t0, total = time.time(), self.searching(query, True)
-
         # do async requests
         if total > ITEMS_PER_PAGE:
-            qrs = [PATTERNS[1] % (query, x) for x in rng(total)]
-            with ThreadPoolExecutor(len(qrs)) as executor:
+            query = query.replace("/date/0", "/date/{}")
+            qrs = [query.format(x) for x in rng(total)]
+            with ThreadPoolExecutor(min(len(qrs), 8)) as executor:
                 for q in qrs:
                     executor.submit(self.searching, q)
 
@@ -333,6 +294,13 @@ class NNMClub:
     def _download_torrent(self, url: str) -> None:
         # Download url
         response = self._request(url)
+        if config.magnet:
+            match = re.search(r'href\s*=\s*"(magnet[^"]+)"', response.decode())
+            if not match:
+                raise ValueError("Error, please fill a bug report!")
+            logger.debug(match.group(1) + " " + url)
+            print(match.group(1) + " " + url)
+            return
 
         # Create a torrent file
         with NamedTemporaryFile(suffix=".torrent", delete=False) as fd:
@@ -396,12 +364,12 @@ class NNMClub:
 
 
 # pep8
-nnmclub = NNMClub
+thelimetorrents = TheLimeTorrents
 
 if __name__ == "__main__":
     if BASEDIR.parent.joinpath("settings_gui.py").exists():
         from settings_gui import EngineSettingsGUI
 
         EngineSettingsGUI(str(BASEDIR / FILENAME))
-    engine = nnmclub()
+    engine = thelimetorrents()
     engine.search("doctor")

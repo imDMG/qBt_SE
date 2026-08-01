@@ -8,7 +8,8 @@ __pycache__/
 
 # Project-specific files
 engines/*
-!/engines/*.{py,png}
+!/engines/*.py
+!/engines/*.png
 temp/
 tests/
 proxylist.txt
